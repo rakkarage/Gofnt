@@ -19,7 +19,18 @@ func _ready() -> void:
 	name = "JuicyFontEditor"
 	data = BMFontData.new()
 	_build_ui()
-	_set_status("Drop-ready: use Open .fnt to load a bitmap font (text BMFont) and its atlas PNG.")
+	set_process_unhandled_input(true)
+	_set_status("Drop-ready: use Open .fnt to load a bitmap font (text BMFont) and its atlas PNG.  F11: fullscreen")
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F11:
+		var win := get_window()
+		if win:
+			if win.mode == Window.MODE_FULLSCREEN:
+				win.mode = Window.MODE_WINDOWED
+			else:
+				win.mode = Window.MODE_FULLSCREEN
+		accept_event()
 
 func _build_ui() -> void:
 	var root := HBoxContainer.new()
@@ -55,7 +66,8 @@ func _build_ui() -> void:
 	var pv_lbl := Label.new(); pv_lbl.text = "Live preview"; left.add_child(pv_lbl)
 	preview_edit = TextEdit.new()
 	preview_edit.text = "The quick brown fox jumps over the lazy dog.\n0123456789 !?@#$%"
-	preview_edit.custom_minimum_size = Vector2(0, 60)
+	preview_edit.custom_minimum_size = Vector2(0, 80)
+	preview_edit.scroll_fit_content_height = true
 	preview_edit.text_changed.connect(func(): preview_canvas.queue_redraw())
 	left.add_child(preview_edit)
 	preview_canvas = Control.new()
