@@ -3,12 +3,11 @@
 importer="font_data_bmfont"
 type="FontFile"
 uid="uid://vxvgk6iccvf3"
-path="res://.godot/imported/Super12White.fnt-2ef5c1820f224b768947763eb8935696.fontdata"
+valid=false
 
 [deps]
 
-source_file="res://Visual/Font/Super12White.fnt"
-dest_files=["res://.godot/imported/Super12White.fnt-2ef5c1820f224b768947763eb8935696.fontdata"]
+source_file="res://Font/Super12White.fnt"
 
 [params]
 
