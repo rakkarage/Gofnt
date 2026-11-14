@@ -147,28 +147,27 @@ func _load_image_compat(path: String) -> Image:
 					return tex_img.duplicate()
 			elif res is Image:
 				return (res as Image).duplicate()
-		if FileAccess.file_exists(path):
-			var bytes := FileAccess.get_file_as_bytes(path)
-			if not bytes.is_empty():
-				var img := Image.new()
-				var lower := path.to_lower()
-				var err := ERR_FILE_UNRECOGNIZED
-				if lower.ends_with(".png"):
-					err = img.load_png_from_buffer(bytes)
-				elif lower.ends_with(".webp"):
+		var bytes := FileAccess.get_file_as_bytes(path)
+		if not bytes.is_empty():
+			var img := Image.new()
+			var lower := path.to_lower()
+			var err := ERR_FILE_UNRECOGNIZED
+			if lower.ends_with(".png"):
+				err = img.load_png_from_buffer(bytes)
+			elif lower.ends_with(".webp"):
+				err = img.load_webp_from_buffer(bytes)
+			elif lower.ends_with(".jpg") or lower.ends_with(".jpeg"):
+				err = img.load_jpg_from_buffer(bytes)
+			elif lower.ends_with(".bmp"):
+				err = img.load_bmp_from_buffer(bytes)
+			else:
+				err = img.load_png_from_buffer(bytes)
+				if err != OK:
 					err = img.load_webp_from_buffer(bytes)
-				elif lower.ends_with(".jpg") or lower.ends_with(".jpeg"):
+				if err != OK:
 					err = img.load_jpg_from_buffer(bytes)
-				elif lower.ends_with(".bmp"):
-					err = img.load_bmp_from_buffer(bytes)
-				else:
-					err = img.load_png_from_buffer(bytes)
-					if err != OK:
-						err = img.load_webp_from_buffer(bytes)
-					if err != OK:
-						err = img.load_jpg_from_buffer(bytes)
-				if err == OK:
-					return img
+			if err == OK:
+				return img
 		# Fallback for editor/desktop cases.
 		var abs_path := ProjectSettings.globalize_path(path)
 		return Image.load_from_file(abs_path)
