@@ -84,13 +84,13 @@ func _save_window_settings(enabled: bool) -> void:
 	cfg.set_value(SETTINGS_SECTION, SETTINGS_FULLSCREEN_KEY, enabled)
 	cfg.save(SETTINGS_PATH)
 
-func _load_ttf_import_settings() -> Dictionary:
-	var defaults := {
+func _default_ttf_import_settings() -> Dictionary:
+	return {
 		"size": 16,
 		"filter": 0,
 		"outline": 0,
 		"outline_color": Color.BLACK,
-		"gradient_dir": 0,
+		"gradient_dir": 1,
 		"gradient_color1": Color.WHITE,
 		"gradient_color2": Color(0.7, 0.85, 1.0, 1.0),
 		"fill_mode": 0, # 0=solid, 1=gradient, 2=stamp(image), 3=procedural
@@ -99,6 +99,9 @@ func _load_ttf_import_settings() -> Dictionary:
 		"proc_effect": 0, # 0=scanlines,1=bayer,2=checker,3=noise,4=edge tint/bevel
 		"proc_color": Color(1, 1, 1, 1),
 	}
+
+func _load_ttf_import_settings() -> Dictionary:
+	var defaults := _default_ttf_import_settings()
 	var cfg := ConfigFile.new()
 	if cfg.load(SETTINGS_PATH) != OK:
 		return defaults
@@ -624,10 +627,11 @@ func _on_repack() -> void:
 		if used_h > h: continue
 		var a: int = w * h
 		var aspect := float(maxi(w, h)) / float(maxi(1, mini(w, h)))
-		var best_aspect := 999.0
+		var best_score := 1.79769e308
 		if not best.is_empty():
-			best_aspect = float(maxi(int(best.w), int(best.h))) / float(maxi(1, mini(int(best.w), int(best.h))))
-		if best.is_empty() or a < best_area or (a == best_area and aspect < best_aspect):
+			best_score = float(best_area) * float(maxi(int(best.w), int(best.h))) / float(maxi(1, mini(int(best.w), int(best.h))))
+		var score := float(a) * aspect
+		if best.is_empty() or score < best_score or (is_equal_approx(score, best_score) and a < best_area):
 			best_area = a; best = {"w": w, "h": h, "pos": pos}
 	if best.is_empty():
 		_set_status("Repack failed: glyphs don't fit in 4096^2"); return
@@ -909,9 +913,10 @@ func _show_ttf_options(font_path: String) -> void:
 	d.dialog_hide_on_ok = false
 
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(600, 0)
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	d.add_child(scroll)
 
 	var vb := VBoxContainer.new()
@@ -925,10 +930,10 @@ func _show_ttf_options(font_path: String) -> void:
 	grid.add_child(_lbl("Outline (px)")); var outline_sz := SpinBox.new(); outline_sz.min_value = 0; outline_sz.max_value = 8; outline_sz.value = int(saved.get("outline", 0)); outline_sz.step = 1; grid.add_child(outline_sz)
 	grid.add_child(_lbl("Outline color")); var outline_col := ColorPickerButton.new(); outline_col.color = saved.get("outline_color", Color.BLACK); outline_col.custom_minimum_size = Vector2(120, 0); grid.add_child(outline_col)
 	grid.add_child(_lbl("Fill")); var fill_mode := OptionButton.new(); fill_mode.add_item("Solid", 0); fill_mode.add_item("Gradient", 1); fill_mode.add_item("Stamp (image)", 2); fill_mode.add_item("Procedural", 3); fill_mode.select(clampi(int(saved.get("fill_mode", 0)), 0, 3)); grid.add_child(fill_mode)
-	grid.add_child(_lbl("Gradient")); var grad_dir := OptionButton.new(); grad_dir.add_item("Vertical (top-bottom)", 1); grad_dir.add_item("Horizontal (left-right)", 2); grad_dir.add_item("Diagonal (TL-BR)", 3); grad_dir.add_item("Diagonal (TR-BL)", 4); grad_dir.select(clampi(int(saved.get("gradient_dir", 1)), 1, 4)); grid.add_child(grad_dir)
+	grid.add_child(_lbl("Gradient")); var grad_dir := OptionButton.new(); grad_dir.add_item("Vertical (top-bottom)", 1); grad_dir.add_item("Horizontal (left-right)", 2); grad_dir.add_item("Diagonal (TL-BR)", 3); grad_dir.add_item("Diagonal (TR-BL)", 4); grad_dir.select(clampi(int(saved.get("gradient_dir", 1)) - 1, 0, 3)); grid.add_child(grad_dir)
 	grid.add_child(_lbl("Gradient from")); var grad_c1 := ColorPickerButton.new(); grad_c1.color = saved.get("gradient_color1", Color.WHITE); grad_c1.custom_minimum_size = Vector2(120, 0); grid.add_child(grad_c1)
 	grid.add_child(_lbl("Gradient to")); var grad_c2 := ColorPickerButton.new(); grad_c2.color = saved.get("gradient_color2", Color(0.7, 0.85, 1.0, 1.0)); grad_c2.custom_minimum_size = Vector2(120, 0); grid.add_child(grad_c2)
-	grid.add_child(_lbl("Stamp image")); var stamp_row := HBoxContainer.new(); stamp_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL; var stamp_path := LineEdit.new(); stamp_path.text = str(saved.get("stamp_path", "")); stamp_path.placeholder_text = "Path to image (png, jpg, webp...)"; stamp_path.size_flags_horizontal = Control.SIZE_EXPAND_FILL; stamp_row.add_child(stamp_path); var stamp_browse := Button.new(); stamp_browse.text = "Browse…"; stamp_row.add_child(stamp_browse); grid.add_child(stamp_row)
+	grid.add_child(_lbl("Stamp image")); var stamp_row := HBoxContainer.new(); stamp_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL; var stamp_path := LineEdit.new(); stamp_path.text = str(saved.get("stamp_path", "")); stamp_path.placeholder_text = "Path to image (png, jpg, webp...)"; stamp_path.size_flags_horizontal = Control.SIZE_EXPAND_FILL; stamp_row.add_child(stamp_path); var stamp_browse := Button.new(); stamp_browse.text = "Browse..."; stamp_row.add_child(stamp_browse); grid.add_child(stamp_row)
 	grid.add_child(_lbl("Stamp mapping")); var stamp_tile := OptionButton.new(); stamp_tile.add_item("Tile", 0); stamp_tile.add_item("Fit to glyph", 1); stamp_tile.select(0 if bool(saved.get("stamp_tile", true)) else 1); grid.add_child(stamp_tile)
 	grid.add_child(_lbl("Procedural effect")); var proc_effect := OptionButton.new(); proc_effect.add_item("Scanlines", 0); proc_effect.add_item("Bayer dither", 1); proc_effect.add_item("Checker", 2); proc_effect.add_item("Noise grain", 3); proc_effect.add_item("Edge tint / bevel", 4); proc_effect.select(clampi(int(saved.get("proc_effect", 0)), 0, 4)); grid.add_child(proc_effect)
 	grid.add_child(_lbl("Procedural color")); var proc_color := ColorPickerButton.new(); proc_color.color = saved.get("proc_color", Color.WHITE); proc_color.custom_minimum_size = Vector2(120, 0); grid.add_child(proc_color)
@@ -940,6 +945,23 @@ func _show_ttf_options(font_path: String) -> void:
 	stamp_fd.file_selected.connect(func(path): stamp_path.text = path)
 	d.add_child(stamp_fd)
 	stamp_browse.pressed.connect(func(): stamp_fd.popup_centered(Vector2i(700, 500)))
+
+	var reset_btn := d.add_button("Reset", false, "reset")
+	reset_btn.pressed.connect(func():
+		var defaults := _default_ttf_import_settings()
+		sz.value = int(defaults.get("size", 16))
+		filt.select(clampi(int(defaults.get("filter", 0)), 0, 1))
+		outline_sz.value = int(defaults.get("outline", 0))
+		outline_col.color = defaults.get("outline_color", Color.BLACK)
+		fill_mode.select(clampi(int(defaults.get("fill_mode", 0)), 0, 3))
+		grad_dir.select(clampi(int(defaults.get("gradient_dir", 1)) - 1, 0, 3))
+		grad_c1.color = defaults.get("gradient_color1", Color.WHITE)
+		grad_c2.color = defaults.get("gradient_color2", Color(0.7, 0.85, 1.0, 1.0))
+		stamp_path.text = str(defaults.get("stamp_path", ""))
+		stamp_tile.select(0 if bool(defaults.get("stamp_tile", true)) else 1)
+		proc_effect.select(clampi(int(defaults.get("proc_effect", 0)), 0, 4))
+		proc_color.color = defaults.get("proc_color", Color.WHITE)
+	)
 
 	add_child(d)
 	d.confirmed.connect(func():
@@ -965,9 +987,9 @@ func _show_ttf_options(font_path: String) -> void:
 	d.canceled.connect(func(): d.queue_free())
 
 	var vp_size := get_viewport_rect().size
-	var target_w := mini(640, int(vp_size.x * 0.9))
-	var target_h := mini(460, int(vp_size.y * 0.85))
-	d.popup_centered(Vector2i(maxi(target_w, 320), maxi(target_h, 240)))
+	var target_w := mini(700, int(vp_size.x * 0.92))
+	var target_h := mini(700, int(vp_size.y * 0.92))
+	d.popup_centered(Vector2i(maxi(target_w, 360), maxi(target_h, 320)))
 
 func _import_ttf(font_path: String, opts: Dictionary) -> void:
 	var font_size: int = int(opts.get("size", 16))
@@ -1245,10 +1267,11 @@ func _pack_rendered_font(font_face: String, font_size: int, rendered: Array, pad
 		if used_h > h: continue
 		var a: int = w * h
 		var aspect := float(maxi(w, h)) / float(maxi(1, mini(w, h)))
-		var best_aspect := 999.0
+		var best_score := 1.79769e308
 		if not best.is_empty():
-			best_aspect = float(maxi(int(best.w), int(best.h))) / float(maxi(1, mini(int(best.w), int(best.h))))
-		if best.is_empty() or a < best_area or (a == best_area and aspect < best_aspect):
+			best_score = float(best_area) * float(maxi(int(best.w), int(best.h))) / float(maxi(1, mini(int(best.w), int(best.h))))
+		var score := float(a) * aspect
+		if best.is_empty() or score < best_score or (is_equal_approx(score, best_score) and a < best_area):
 			best_area = a; best = {"w": w, "h": h, "pos": pos}
 	if best.is_empty():
 		_set_status("TTF import failed: could not pack atlas"); return
