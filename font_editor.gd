@@ -215,7 +215,7 @@ func _build_ui() -> void:
 	load_demo_lbl.add_theme_color_override("font_color", Color(0.72, 0.84, 1.0))
 	examples_row.add_child(load_demo_lbl)
 	var load_dd := OptionButton.new()
-	load_dd.add_item("[load]", 0)
+	load_dd.add_item("Select", 0)
 	load_dd.add_item("SuperBlack12", 2)
 	load_dd.add_item("SuperWhite12", 3)
 	load_dd.add_item("Venice16", 1)
