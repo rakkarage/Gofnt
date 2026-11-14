@@ -11,6 +11,7 @@ const SETTINGS_APPLY_DEMO_KEY := "apply_demo"
 var data: BMFontData
 var atlas: Control
 var glyph_list: ItemList
+var glyph_jump_edit: LineEdit
 var status_lbl: Label
 var preview_edit: TextEdit
 var preview_canvas: Control
@@ -290,8 +291,6 @@ func _build_ui() -> void:
 	# Right: tabs
 	var tabs := TabContainer.new()
 	tabs.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	tabs.size_flags_stretch_ratio = 1.3
-	tabs.custom_minimum_size = Vector2(320, 0)
 	root.add_child(tabs)
 
 	tabs.add_child(_build_glyph_tab())
@@ -303,15 +302,14 @@ func _build_ui() -> void:
 
 func _build_glyph_tab() -> Control:
 	var vb := VBoxContainer.new()
-	var hl := Label.new(); hl.text = "Glyphs (ASCII 32-126 shown; missing can be created)"; vb.add_child(hl)
 	glyph_list = ItemList.new(); glyph_list.size_flags_vertical = Control.SIZE_EXPAND_FILL; glyph_list.custom_minimum_size = Vector2(0, 180)
 	glyph_list.item_selected.connect(_on_list_selected)
 	vb.add_child(glyph_list)
 	var add_row := HBoxContainer.new(); vb.add_child(add_row)
-	var add_edit := LineEdit.new(); add_edit.placeholder_text = "char or id (e.g. A or 65)"; add_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL; add_row.add_child(add_edit)
+	glyph_jump_edit = LineEdit.new(); glyph_jump_edit.placeholder_text = "Enter char or id (e.g. A or 65)"; glyph_jump_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL; add_row.add_child(glyph_jump_edit)
 	var add_btn := Button.new(); add_btn.text = "Add / Go"; add_btn.tooltip_text = "Create (if missing) and select glyph for the given character or numeric id"; add_row.add_child(add_btn)
-	add_btn.pressed.connect(func(): _add_or_select_glyph(add_edit.text))
-	add_edit.text_submitted.connect(func(_t): _add_or_select_glyph(add_edit.text))
+	add_btn.pressed.connect(func(): _add_or_select_glyph(glyph_jump_edit.text))
+	glyph_jump_edit.text_submitted.connect(func(_t): _add_or_select_glyph(glyph_jump_edit.text))
 	glyph_action_btn = Button.new(); glyph_action_btn.text = "Create glyph"; glyph_action_btn.disabled = true
 	glyph_action_btn.tooltip_text = "Create or delete the selected glyph entry"
 	glyph_action_btn.pressed.connect(_on_glyph_action)
@@ -444,6 +442,7 @@ func _on_glyph_selected(id: int) -> void:
 		_ensure_glyph(id)
 	sel_id = id
 	_sync_props()
+	_populate_glyph_jump(id)
 	# select in list
 	for i in glyph_list.item_count:
 		if int(glyph_list.get_item_metadata(i)) == id:
@@ -462,6 +461,7 @@ func _on_list_selected(idx: int) -> void:
 	atlas.selected_id = sel_id
 	atlas.queue_redraw()
 	_sync_props()
+	_populate_glyph_jump(id)
 
 func _ensure_glyph(id: int) -> void:
 	if data == null or data.chars.has(id): return
@@ -492,6 +492,18 @@ func _add_or_select_glyph(text: String) -> void:
 	for i in glyph_list.item_count:
 		if int(glyph_list.get_item_metadata(i)) == id:
 			glyph_list.select(i); _on_list_selected(i); return
+
+func _populate_glyph_jump(id: int) -> void:
+	if glyph_jump_edit == null or id < 0:
+		return
+	if glyph_jump_edit.has_focus():
+		return
+	if id >= 32 and id <= 126 and id != 32:
+		glyph_jump_edit.text = String.chr(id)
+	elif id == 32:
+		glyph_jump_edit.text = "32"
+	else:
+		glyph_jump_edit.text = str(id)
 
 func _sync_props() -> void:
 	_updating_ui = true
