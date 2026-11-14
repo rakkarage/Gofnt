@@ -32,7 +32,8 @@ func _apply_project_default_theme() -> void:
 	elif ResourceLoader.exists("res://themes/venice16_x1.tres"):
 		theme = load("res://themes/venice16_x1.tres")
 	preview_scale = 1.0
-	preview_canvas.queue_redraw() if preview_canvas else null
+	if preview_canvas:
+		preview_canvas.queue_redraw()
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F11:
