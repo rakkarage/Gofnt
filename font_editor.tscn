@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" uid="uid://ci23ybeyqwbpu" path="res://font_editor.gd" id="1"]
 
-[node name="JuicyFontEditor" type="PanelContainer" unique_id=484314587]
+[node name="Gofnt" type="PanelContainer" unique_id=484314587]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0

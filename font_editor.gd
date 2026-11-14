@@ -18,7 +18,7 @@ var sel_id: int = -1
 var _updating_ui := false
 
 func _ready() -> void:
-	name = "JuicyFontEditor"
+	name = "Gofnt"
 	data = BMFontData.new()
 	_build_ui()
 	set_process_unhandled_input(true)
