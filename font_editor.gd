@@ -1377,7 +1377,7 @@ func _try_pack_ttf(glyphs: Array, W: int, H: int, pad: int) -> Array:
 
 func _on_probe_fonts() -> void:
 	var report := _probe_fonts_report()
-	_set_status("Font probe complete — see diagnostics dialog", report.has("had_error") and bool(report.had_error))
+	_set_status("Font probe complete - see diagnostics dialog", report.has("had_error") and bool(report.had_error))
 	var d := AcceptDialog.new()
 	d.title = "Font Probe Diagnostics"
 	d.dialog_hide_on_ok = true
