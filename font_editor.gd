@@ -22,7 +22,17 @@ func _ready() -> void:
 	data = BMFontData.new()
 	_build_ui()
 	set_process_unhandled_input(true)
+	_apply_project_default_theme()
 	_set_status("Drop-ready: use Open .fnt to load a bitmap font (text BMFont) and its atlas PNG.  F11: fullscreen")
+
+func _apply_project_default_theme() -> void:
+	var def_path := str(ProjectSettings.get_setting("gui/theme/custom", "res://themes/venice16_x1.tres"))
+	if def_path != "" and ResourceLoader.exists(def_path):
+		theme = load(def_path)
+	elif ResourceLoader.exists("res://themes/venice16_x1.tres"):
+		theme = load("res://themes/venice16_x1.tres")
+	preview_scale = 1.0
+	preview_canvas.queue_redraw() if preview_canvas else null
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F11:
@@ -51,6 +61,7 @@ func _build_ui() -> void:
 	left.add_child(bar)
 	var open_btn := Button.new(); open_btn.text = "Open .fnt"; open_btn.tooltip_text = "Load a BMFont .fnt (text/XML) and its atlas PNG"; open_btn.pressed.connect(_on_open); bar.add_child(open_btn)
 	var open_img_btn := Button.new(); open_img_btn.text = "Import Image"; open_img_btn.tooltip_text = "Import a PNG and auto-detect glyph regions (creates a new font)"; open_img_btn.pressed.connect(_on_import_image); bar.add_child(open_img_btn)
+	var open_ttf_btn := Button.new(); open_ttf_btn.text = "Import TTF/OTF"; open_ttf_btn.tooltip_text = "Generate a bitmap font atlas from a TTF/OTF at a chosen size (basic rasterization)"; open_ttf_btn.pressed.connect(_on_import_ttf); bar.add_child(open_ttf_btn)
 	var save_fnt_btn := Button.new(); save_fnt_btn.text = "Save .fnt"; save_fnt_btn.tooltip_text = "Save BMFont data to the loaded .fnt path"; save_fnt_btn.pressed.connect(_on_save_fnt); bar.add_child(save_fnt_btn)
 	var save_png_btn := Button.new(); save_png_btn.text = "Save PNG"; save_png_btn.tooltip_text = "Save atlas image to the loaded PNG path"; save_png_btn.pressed.connect(_on_save_png); bar.add_child(save_png_btn)
 	bar.add_child(VSeparator.new())
@@ -66,15 +77,15 @@ func _build_ui() -> void:
 	load_dd.add_item("Venice16", 1)
 	load_dd.add_item("SuperBlack12", 2)
 	load_dd.add_item("SuperWhite12", 3)
-	load_dd.tooltip_text = "Load an included example .fnt into the editor"
+	load_dd.tooltip_text = "Load an example font"
 	load_dd.item_selected.connect(func(i): _on_load_example(load_dd.get_item_id(i)); load_dd.select(0))
 	examples_row.add_child(load_dd)
 	examples_row.add_child(VSeparator.new())
 	examples_row.add_child(_lbl("Apply Demo:"))
 	var apply_dd := OptionButton.new()
-	for item in ["[apply]", "Venice16 @1x (16)", "Venice16 @2x (32)", "SuperBlack12 @1x (12)", "SuperBlack12 @2x (24)", "SuperWhite12 @1x (12)", "SuperWhite12 @2x (24)"]:
+	for item in ["Venice16 @1x (16) (Default)", "Venice16 @2x (32)", "SuperBlack12 @1x (12)", "SuperBlack12 @2x (24)", "SuperWhite12 @1x (12)", "SuperWhite12 @2x (24)"]:
 		apply_dd.add_item(item)
-	apply_dd.tooltip_text = "Apply an included font to the preview/theme UI at 1x or 2x scale"
+	apply_dd.tooltip_text = "Apply an example font"
 	apply_dd.item_selected.connect(func(i): _on_apply_example(i))
 	examples_row.add_child(apply_dd)
 
@@ -382,14 +393,57 @@ func _draw_preview() -> void:
 	c.draw_line(Vector2(margin.x, margin.y + int(data.common.get("base", lh)) * s), Vector2(c.size.x - 8, margin.y + int(data.common.get("base", lh)) * s), Color(1, 1, 1, 0.08), 1.0)
 
 func _on_save_fnt() -> void:
-	if data == null or data.fnt_path == "": _set_status("Nothing to save"); return
+	if data == null or data.image == null:
+		_set_status("Nothing to save"); return
+	if data.fnt_path == "":
+		var dlg := FileDialog.new()
+		dlg.file_mode = FileDialog.FILE_MODE_SAVE_FILE
+		dlg.access = FileDialog.ACCESS_FILESYSTEM
+		dlg.filters = PackedStringArray(["*.fnt ; BMFont"])
+		dlg.current_file = (str(data.info.get("face", "font")) + ".fnt")
+		add_child(dlg)
+		dlg.file_selected.connect(func(p):
+			data.fnt_path = p
+			if data.image_path == "":
+				data.image_path = p.get_basename() + ".png"
+			_do_save_fnt()
+			dlg.queue_free()
+		)
+		dlg.canceled.connect(func(): dlg.queue_free())
+		dlg.popup_centered_ratio(0.7)
+		return
+	_do_save_fnt()
+
+func _do_save_fnt() -> void:
 	var err := data.save_fnt(data.fnt_path)
-	_set_status("Saved .fnt" if err == OK else "Save failed: %d" % err)
+	if err == OK and not data.pages.is_empty():
+		data.pages[0]["file"] = data.fnt_path.get_file().get_basename() + ".png"
+	_set_status("Saved .fnt to %s" % data.fnt_path if err == OK else "Save failed: %d" % err)
 
 func _on_save_png() -> void:
-	if data == null or data.image_path == "": _set_status("Nothing to save"); return
+	if data == null or data.image == null:
+		_set_status("Nothing to save"); return
+	if data.image_path == "":
+		var base := data.fnt_path.get_basename() if data.fnt_path != "" else str(data.info.get("face", "font"))
+		var dlg := FileDialog.new()
+		dlg.file_mode = FileDialog.FILE_MODE_SAVE_FILE
+		dlg.access = FileDialog.ACCESS_FILESYSTEM
+		dlg.filters = PackedStringArray(["*.png ; PNG Image"])
+		dlg.current_file = base.get_file() + ".png"
+		add_child(dlg)
+		dlg.file_selected.connect(func(p):
+			data.image_path = p
+			_do_save_png()
+			dlg.queue_free()
+		)
+		dlg.canceled.connect(func(): dlg.queue_free())
+		dlg.popup_centered_ratio(0.7)
+		return
+	_do_save_png()
+
+func _do_save_png() -> void:
 	var err := data.save_png(data.image_path)
-	_set_status("Saved PNG" if err == OK else "Save failed: %d" % err)
+	_set_status("Saved PNG to %s" % data.image_path if err == OK else "Save failed: %d" % err)
 
 func _on_repack() -> void:
 	if data == null or data.image == null: return
@@ -414,7 +468,11 @@ func _on_repack() -> void:
 		h = clampi(h, 1, 4096)
 		if used_h > h: continue
 		var a: int = w * h
-		if a < best_area:
+		var aspect := float(maxi(w, h)) / float(maxi(1, mini(w, h)))
+		var best_aspect := 999.0
+		if not best.is_empty():
+			best_aspect = float(maxi(int(best.w), int(best.h))) / float(maxi(1, mini(int(best.w), int(best.h))))
+		if best.is_empty() or a < best_area or (a == best_area and aspect < best_aspect):
 			best_area = a; best = {"w": w, "h": h, "pos": pos}
 	if best.is_empty():
 		_set_status("Repack failed: glyphs don't fit in 4096^2"); return
@@ -615,13 +673,20 @@ func _on_apply_example(idx: int) -> void:
 		6: "res://themes/superwhite12_x2.tres",
 	}
 	if idx == 0 or not theme_map.has(idx):
-		theme = null
-		preview_scale = 2.0
+		var def_path := str(ProjectSettings.get_setting("gui/theme/custom", "res://themes/venice16_x1.tres"))
+		var tdef: Theme = null
+		if def_path != "" and ResourceLoader.exists(def_path):
+			tdef = load(def_path)
+		if tdef == null and ResourceLoader.exists("res://themes/venice16_x1.tres"):
+			tdef = load("res://themes/venice16_x1.tres")
+		theme = tdef
 		if preview_edit:
 			preview_edit.remove_theme_font_override("font")
 			preview_edit.remove_theme_font_size_override("font_size")
+		# project default is Venice16 @1x
+		preview_scale = 1.0
 		preview_canvas.queue_redraw()
-		_set_status("Theme/demo cleared")
+		_set_status("Applied project default theme: %s" % (def_path.get_file() if def_path != "" else "Venice16 @1x"))
 		return
 	var tpath: String = theme_map[idx]
 	var t: Theme = null
@@ -651,3 +716,201 @@ func _on_apply_example(idx: int) -> void:
 	preview_scale = 2.0 if idx % 2 == 0 else 1.0
 	preview_canvas.queue_redraw()
 	_set_status("Applied theme to root: %s (live, no reload needed)" % tpath.get_file())
+
+func _on_import_ttf() -> void:
+	var dlg := FileDialog.new()
+	dlg.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+	dlg.access = FileDialog.ACCESS_FILESYSTEM
+	dlg.filters = PackedStringArray(["*.ttf,*.otf ; Font"])
+	add_child(dlg)
+	dlg.file_selected.connect(func(p): dlg.queue_free(); _show_ttf_options(p))
+	dlg.canceled.connect(func(): dlg.queue_free())
+	dlg.popup_centered_ratio(0.7)
+
+func _show_ttf_options(font_path: String) -> void:
+	var d := AcceptDialog.new()
+	d.title = "Import TTF/OTF"
+	d.dialog_hide_on_ok = false
+	var vb := VBoxContainer.new()
+	d.add_child(vb)
+	var grid := GridContainer.new(); grid.columns = 2; vb.add_child(grid)
+	grid.add_child(_lbl("Size")); var sz := SpinBox.new(); sz.min_value = 6; sz.max_value = 128; sz.value = 16; sz.step = 1; grid.add_child(sz)
+	grid.add_child(_lbl("Charset")); var chars := LineEdit.new(); chars.text = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"; chars.custom_minimum_size = Vector2(420, 0); grid.add_child(chars)
+	var info := Label.new(); info.text = "Will rasterize printable glyphs into a new bitmap atlas."; info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; vb.add_child(info)
+	add_child(d)
+	d.confirmed.connect(func():
+		var size_v := int(sz.value)
+		var charset_v := chars.text
+		d.queue_free()
+		_import_ttf(font_path, size_v, charset_v)
+	)
+	d.canceled.connect(func(): d.queue_free())
+	d.popup_centered(Vector2i(560, 180))
+
+func _import_ttf(font_path: String, font_size: int, charset: String) -> void:
+	var font := FontFile.new()
+	var err := font.load_dynamic_font(font_path)
+	if err != OK:
+		# try loading as resource/data
+		var bytes := FileAccess.get_file_as_bytes(font_path)
+		if bytes.size() == 0:
+			_set_status("Failed to load TTF/OTF: %s" % font_path); return
+		font.data = bytes
+	var unique: Dictionary = {}
+	var order: Array[int] = []
+	for i in charset.length():
+		var cp := charset.unicode_at(i)
+		if cp == 10: continue
+		if not unique.has(cp):
+			unique[cp] = true; order.append(cp)
+	if order.is_empty():
+		for cp in range(32, 127): order.append(cp)
+	# measure glyphs and render via SubViewport
+	await get_tree().process_frame
+	var pad := 2
+	var entries: Array = []
+	# collect metrics using font
+	for cp in order:
+		var ch := String.chr(cp)
+		var adv := font.get_string_size(ch, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
+		var xadv := int(ceil(adv.x))
+		if xadv <= 0: xadv = int(font_size / 2.0)
+		# estimate bounds by rendering char alone in a small probe
+		entries.append({"cp": cp, "ch": ch, "xadv": xadv})
+	# render in batches to get images: use one SubViewport and draw each char
+	var vp := SubViewport.new()
+	vp.disable_3d = true
+	vp.transparent_bg = true
+	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(vp)
+	var ci := Control.new()
+	ci.set_anchors_preset(Control.PRESET_FULL_RECT)
+	vp.add_child(ci)
+	ci.draw.connect(func(): _draw_ttf_probe(ci))
+	var rendered: Array = [] # {cp,xadv,img,ox,oy}
+	var margin := int(font_size)
+	for e in entries:
+		var cw := int(font_size * 2) + margin * 2
+		var chh := int(font_size * 2) + margin * 2
+		vp.size = Vector2i(cw, chh)
+		ci.set_meta("ds", {"font": font, "cp": e.cp, "size": font_size, "margin": margin})
+		vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+		ci.queue_redraw()
+		await RenderingServer.frame_post_draw
+		await RenderingServer.frame_post_draw
+		var tex := vp.get_texture()
+		if tex == null:
+			rendered.append({"cp": e.cp, "xadv": e.xadv, "w": 0, "h": 0, "img": null, "ox": 0, "oy": 0})
+			continue
+		var img := tex.get_image()
+		if img == null:
+			rendered.append({"cp": e.cp, "xadv": e.xadv, "w": 0, "h": 0, "img": null, "ox": 0, "oy": 0})
+			continue
+		var b := _alpha_bounds(img)
+		if b.size.x <= 0 or b.size.y <= 0:
+			rendered.append({"cp": e.cp, "xadv": e.xadv, "w": 0, "h": 0, "img": null, "ox": 0, "oy": 0})
+		else:
+			var sub := img.get_region(b)
+			var ox := b.position.x - margin
+			var oy := b.position.y - margin
+			rendered.append({"cp": e.cp, "xadv": e.xadv, "w": b.size.x, "h": b.size.y, "img": sub, "ox": ox, "oy": oy})
+	vp.queue_free()
+	_pack_rendered_font(font_path.get_file().get_basename(), font_size, rendered, pad)
+
+func _draw_ttf_probe(ci: Control) -> void:
+	if not ci.has_meta("ds"): return
+	var ds: Dictionary = ci.get_meta("ds")
+	var font: Font = ds.font
+	var cp: int = ds.cp
+	var fsize: int = ds.size
+	var margin: int = ds.margin
+	ci.draw_rect(Rect2(Vector2.ZERO, ci.size), Color(0, 0, 0, 0))
+	# draw baseline at margin+size
+	var baseline := Vector2(margin, margin + fsize)
+	ci.draw_char(font, baseline, String.chr(cp), fsize, Color.WHITE)
+
+func _alpha_bounds(img: Image) -> Rect2i:
+	var w := img.get_width(); var h := img.get_height()
+	var minx := w; var miny := h; var maxx := -1; var maxy := -1
+	for y in h:
+		for x in w:
+			if img.get_pixel(x, y).a > 0.01:
+				if x < minx: minx = x
+				if y < miny: miny = y
+				if x > maxx: maxx = x
+				if y > maxy: maxy = y
+	if maxx < minx:
+		return Rect2i(0, 0, 0, 0)
+	return Rect2i(minx, miny, maxx - minx + 1, maxy - miny + 1)
+
+func _pack_rendered_font(font_face: String, font_size: int, rendered: Array, pad: int) -> void:
+	var glyphs: Array = []
+	for r in rendered:
+		if int(r.w) > 0 and int(r.h) > 0:
+			glyphs.append(r)
+	glyphs.sort_custom(func(a, b): return int(a.h) > int(b.h) or (int(a.h) == int(b.h) and int(a.w) > int(b.w)))
+	var best := {}
+	var best_area := 1 << 60
+	for w in [64, 128, 256, 512, 768, 1024, 2048]:
+		var pos := _try_pack_ttf(glyphs, w, 4096, pad)
+		if pos.is_empty(): continue
+		var used_h := 0
+		for it in pos:
+			used_h = maxi(used_h, int(it.y) + int(it.c.h) + pad)
+		var h := 1
+		while h < used_h and h < 4096: h *= 2
+		h = clampi(h, 1, 4096)
+		if used_h > h: continue
+		var a: int = w * h
+		var aspect := float(maxi(w, h)) / float(maxi(1, mini(w, h)))
+		var best_aspect := 999.0
+		if not best.is_empty():
+			best_aspect = float(maxi(int(best.w), int(best.h))) / float(maxi(1, mini(int(best.w), int(best.h))))
+		if best.is_empty() or a < best_area or (a == best_area and aspect < best_aspect):
+			best_area = a; best = {"w": w, "h": h, "pos": pos}
+	if best.is_empty():
+		_set_status("TTF import failed: could not pack atlas"); return
+	var nw: int = best.w; var nh: int = best.h
+	var img := Image.create(nw, nh, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	data.clear()
+	data.image = img
+	data.image_path = ""
+	data.fnt_path = ""
+	data.info = {"face": font_face, "size": font_size}
+	data.common = {"lineHeight": font_size, "base": int(font_size * 0.8), "scaleW": nw, "scaleH": nh, "pages": 1}
+	data.pages = [ {"id": 0, "file": font_face + ".png"}]
+	for it in best.pos:
+		var r: Dictionary = it.c
+		if r.img != null:
+			img.blit_rect(r.img, Rect2i(Vector2i.ZERO, r.img.get_size()), Vector2i(int(it.x), int(it.y)))
+		var cp := int(r.cp)
+		data.chars[cp] = {"id": cp, "x": int(it.x), "y": int(it.y), "width": int(r.w), "height": int(r.h), "xoffset": int(r.ox), "yoffset": int(r.oy), "xadvance": int(r.xadv), "page": 0, "chnl": 15}
+	# include empty glyphs (space etc.)
+	for r in rendered:
+		var cp := int(r.cp)
+		if data.chars.has(cp): continue
+		data.chars[cp] = {"id": cp, "x": 0, "y": 0, "width": 0, "height": 0, "xoffset": 0, "yoffset": 0, "xadvance": int(r.xadv), "page": 0, "chnl": 15}
+	data.texture = ImageTexture.create_from_image(img)
+	atlas.set_data(data)
+	_updating_ui = true
+	font_line_h.value = int(data.common.get("lineHeight", font_size))
+	font_base.value = int(data.common.get("base", int(font_size * 0.8)))
+	_updating_ui = false
+	_refresh_glyph_list(); _refresh_kern(); _refresh_stats()
+	preview_canvas.queue_redraw(); atlas.queue_redraw()
+	_set_status("Imported TTF/OTF '%s' at size %d: %d glyphs rasterized" % [font_face, font_size, data.chars.size()])
+
+func _try_pack_ttf(glyphs: Array, W: int, H: int, pad: int) -> Array:
+	var x := pad; var y := pad; var row_h := 0
+	var out := []
+	for g in glyphs:
+		var gw := int(g.w); var gh := int(g.h)
+		if x + gw + pad > W:
+			x = pad; y += row_h + pad; row_h = 0
+		if y + gh + pad > H:
+			return []
+		out.append({"c": g, "x": x, "y": y})
+		x += gw + pad
+		row_h = maxi(row_h, gh)
+	return out

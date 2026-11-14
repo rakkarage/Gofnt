@@ -1,4 +1,4 @@
-# Godot Bitmap Font (.fnt) Editor
+# ✒️ Gofnt
 
 <!-- <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
