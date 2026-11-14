@@ -18,10 +18,36 @@ func clear() -> void:
 func load_fnt(path: String) -> Error:
 	clear()
 	fnt_path = path
+	var text := ""
 	var f := FileAccess.open(path, FileAccess.READ)
-	if f == null:
-		return FileAccess.get_open_error()
-	var text := f.get_as_text()
+	if f != null:
+		text = f.get_as_text()
+	else:
+		# In exports, .fnt sources may be imported as FontFile resources (not kept as raw files).
+		# Try common raw-text fallbacks for bundled demos.
+		var err := FileAccess.get_open_error()
+		var candidates: PackedStringArray = []
+		if path.begins_with("res://") and path.ends_with(".fnt"):
+			candidates.append(path + ".txt")
+			candidates.append(path.get_basename() + ".txt")
+		var loaded := false
+		for cand in candidates:
+			if FileAccess.file_exists(cand):
+				var cf := FileAccess.open(cand, FileAccess.READ)
+				if cf != null:
+					fnt_path = cand
+					text = cf.get_as_text()
+					loaded = true
+					break
+		if not loaded:
+			# Last resort: if bytes are available, try decoding as text.
+			if FileAccess.file_exists(path):
+				var bytes := FileAccess.get_file_as_bytes(path)
+				if not bytes.is_empty():
+					text = bytes.get_string_from_utf8()
+					loaded = true
+		if not loaded:
+			return err
 	if text.strip_edges().begins_with("<"):
 		return _parse_xml(text)
 	return _parse_text(text)

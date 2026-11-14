@@ -834,10 +834,15 @@ func _on_load_example(id: int) -> void:
 	# Prefer the res:// path directly (works in editor and packed/web exports).
 	_load_font(path)
 	if data == null or data.image == null:
+		# Export fallback: .fnt may be imported as a Font resource, so load raw text copy if bundled.
+		_load_font(path + ".txt")
+	if data == null or data.image == null:
 		# Desktop fallback in case a globalized path is needed.
 		var abs_path := ProjectSettings.globalize_path(path)
 		if abs_path != path:
 			_load_font(abs_path)
+		if data == null or data.image == null:
+			_load_font(abs_path + ".txt")
 
 func _on_apply_example(idx: int) -> void:
 	# 0 none, 1 V@1,2 V@2,3 B@1,4 B@2,5 W@1,6 W@2
