@@ -5,6 +5,8 @@ const SETTINGS_PATH := "user://settings.cfg"
 const SETTINGS_SECTION := "window"
 const SETTINGS_FULLSCREEN_KEY := "fullscreen"
 const SETTINGS_TTF_SECTION := "ttf_import"
+const SETTINGS_UI_SECTION := "ui"
+const SETTINGS_APPLY_DEMO_KEY := "apply_demo"
 
 var data: BMFontData
 var atlas: Control
@@ -13,12 +15,16 @@ var status_lbl: Label
 var preview_edit: TextEdit
 var preview_canvas: Control
 var stats_lbl: RichTextLabel
+var load_demo_lbl: Label
+var apply_demo_lbl: Label
+var preview_lbl: Label
 var kern_list: ItemList
 var prop_spin: Dictionary = {}
 var font_line_h: SpinBox
 var font_base: SpinBox
 var glyph_action_btn: Button
 var fullscreen_cb: CheckBox
+var apply_dd: OptionButton
 var preview_scale: float = 2.0
 var sel_id: int = -1
 var _updating_ui := false
@@ -31,6 +37,7 @@ func _ready() -> void:
 	set_process_unhandled_input(true)
 	_apply_project_default_theme()
 	_load_window_settings()
+	_load_apply_settings()
 	_set_status("Drop-ready: use Open .fnt to load a bitmap font (text BMFont) and its atlas PNG.  Toggle Fullscreen with F11 or the checkbox.")
 
 func _apply_project_default_theme() -> void:
@@ -131,6 +138,19 @@ func _apply_ui_tint() -> void:
 	if stats_lbl:
 		stats_lbl.add_theme_color_override("default_color", Color(0.9, 0.93, 0.98, 0.95))
 
+func _clear_ui_tint() -> void:
+	remove_theme_stylebox_override("panel")
+	if status_lbl:
+		status_lbl.remove_theme_color_override("font_color")
+	if stats_lbl:
+		stats_lbl.remove_theme_color_override("default_color")
+	if load_demo_lbl:
+		load_demo_lbl.remove_theme_color_override("font_color")
+	if apply_demo_lbl:
+		apply_demo_lbl.remove_theme_color_override("font_color")
+	if preview_lbl:
+		preview_lbl.remove_theme_color_override("font_color")
+
 func _build_ui() -> void:
 	var root := HBoxContainer.new()
 	root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -164,26 +184,35 @@ func _build_ui() -> void:
 	status_lbl = Label.new(); status_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL; status_lbl.text = ""; status_lbl.clip_text = true; left.add_child(status_lbl)
 
 	var examples_row := HBoxContainer.new(); left.add_child(examples_row)
-	var load_lbl := _lbl("Load Demo:")
-	load_lbl.add_theme_color_override("font_color", Color(0.72, 0.84, 1.0))
-	examples_row.add_child(load_lbl)
+	load_demo_lbl = _lbl("Load Demo:")
+	load_demo_lbl.add_theme_color_override("font_color", Color(0.72, 0.84, 1.0))
+	examples_row.add_child(load_demo_lbl)
 	var load_dd := OptionButton.new()
 	load_dd.add_item("[load]", 0)
-	load_dd.add_item("Venice16", 1)
 	load_dd.add_item("SuperBlack12", 2)
 	load_dd.add_item("SuperWhite12", 3)
+	load_dd.add_item("Venice16", 1)
 	load_dd.tooltip_text = "Load an example bitmap font (.fnt + atlas) from bundled demos"
 	load_dd.item_selected.connect(func(i): _on_load_example(load_dd.get_item_id(i)); load_dd.select(0))
 	examples_row.add_child(load_dd)
 	examples_row.add_child(VSeparator.new())
-	var apply_lbl := _lbl("Apply Demo:")
-	apply_lbl.add_theme_color_override("font_color", Color(0.72, 0.84, 1.0))
-	examples_row.add_child(apply_lbl)
-	var apply_dd := OptionButton.new()
-	for item in ["Venice16 @1x (16) (Default)", "Venice16 @2x (32)", "SuperBlack12 @1x (12)", "SuperBlack12 @2x (24)", "SuperWhite12 @1x (12)", "SuperWhite12 @2x (24)"]:
-		apply_dd.add_item(item)
+	apply_demo_lbl = _lbl("Apply Demo:")
+	apply_demo_lbl.add_theme_color_override("font_color", Color(0.72, 0.84, 1.0))
+	examples_row.add_child(apply_demo_lbl)
+	apply_dd = OptionButton.new()
+	for item in [
+		["None", 0],
+		["SuperBlack12 @1x (12)", 3],
+		["SuperBlack12 @2x (24)", 4],
+		["SuperWhite12 @1x (12)", 5],
+		["SuperWhite12 @2x (24)", 6],
+		["Venice16 @1x (16)", 1],
+		["Venice16 @2x (32)", 2],
+	]:
+		apply_dd.add_item(item[0], item[1])
 	apply_dd.tooltip_text = "Apply an example UI theme/font scale to the editor and preview"
-	apply_dd.item_selected.connect(func(i): _on_apply_example(i))
+	apply_dd.item_selected.connect(func(i): _on_apply_example(apply_dd.get_item_id(i)))
+	apply_dd.select(apply_dd.get_item_index(1))
 	examples_row.add_child(apply_dd)
 
 	atlas = FontAtlasView.new()
@@ -194,9 +223,9 @@ func _build_ui() -> void:
 	atlas.glyph_changed.connect(_on_glyph_changed)
 	left.add_child(atlas)
 
-	var pv_lbl := Label.new(); pv_lbl.text = "Live preview"
-	pv_lbl.add_theme_color_override("font_color", Color(0.72, 0.84, 1.0))
-	left.add_child(pv_lbl)
+	preview_lbl = Label.new(); preview_lbl.text = "Live preview"
+	preview_lbl.add_theme_color_override("font_color", Color(0.72, 0.84, 1.0))
+	left.add_child(preview_lbl)
 	preview_edit = TextEdit.new()
 	preview_edit.text = "The quick brown fox jumps over the lazy dog.\n0123456789 !?@#$%"
 	preview_edit.custom_minimum_size = Vector2(0, 80)
@@ -782,20 +811,16 @@ func _on_apply_example(idx: int) -> void:
 		6: "res://theme/superwhite12_x2.tres",
 	}
 	if idx == 0 or not theme_map.has(idx):
-		var def_path := str(ProjectSettings.get_setting("gui/theme/custom", "res://theme/venice16_x1.tres"))
-		var tdef: Theme = null
-		if def_path != "" and ResourceLoader.exists(def_path):
-			tdef = load(def_path)
-		if tdef == null and ResourceLoader.exists("res://theme/venice16_x1.tres"):
-			tdef = load("res://theme/venice16_x1.tres")
-		theme = tdef
+		# None: use an empty theme so the editor shows Godot's default UI (not the project custom theme)
+		theme = Theme.new()
 		if preview_edit:
 			preview_edit.remove_theme_font_override("font")
 			preview_edit.remove_theme_font_size_override("font_size")
-		# project default is Venice16 @1x
+		_clear_ui_tint()
 		preview_scale = 1.0
 		preview_canvas.queue_redraw()
-		_set_status("Applied project default theme: %s" % (def_path.get_file() if def_path != "" else "Venice16 @1x"))
+		_save_apply_settings(0)
+		_set_status("Applied no theme (Godot default)")
 		return
 	var tpath: String = theme_map[idx]
 	var t: Theme = null
@@ -821,10 +846,33 @@ func _on_apply_example(idx: int) -> void:
 	if preview_edit:
 		preview_edit.remove_theme_font_override("font")
 		preview_edit.remove_theme_font_size_override("font_size")
+	_apply_ui_tint()
 	# keep canvas preview scale in sync with selection (1x for odd, 2x for even >0)
 	preview_scale = 2.0 if idx % 2 == 0 else 1.0
 	preview_canvas.queue_redraw()
+	_save_apply_settings(idx)
 	_set_status("Applied theme to root: %s" % tpath.get_file())
+
+func _load_apply_settings() -> void:
+	var cfg := ConfigFile.new()
+	var idx := 1
+	if cfg.load(SETTINGS_PATH) == OK:
+		idx = int(cfg.get_value(SETTINGS_UI_SECTION, SETTINGS_APPLY_DEMO_KEY, 1))
+	if apply_dd == null:
+		return
+	var sel := apply_dd.get_item_index(idx)
+	if sel < 0:
+		idx = 1
+		sel = apply_dd.get_item_index(idx)
+	if sel >= 0:
+		apply_dd.select(sel)
+	_on_apply_example(idx)
+
+func _save_apply_settings(idx: int) -> void:
+	var cfg := ConfigFile.new()
+	cfg.load(SETTINGS_PATH)
+	cfg.set_value(SETTINGS_UI_SECTION, SETTINGS_APPLY_DEMO_KEY, idx)
+	cfg.save(SETTINGS_PATH)
 
 func _on_import_ttf() -> void:
 	var dlg := FileDialog.new()

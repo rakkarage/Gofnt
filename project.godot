@@ -16,10 +16,6 @@ run/main_scene="res://font_editor.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 config/icon="res://icon.svg"
 
-[gui]
-
-theme/custom="res://theme/venice16_x1.tres"
-
 [rendering]
 
 textures/canvas_textures/default_texture_filter=0
