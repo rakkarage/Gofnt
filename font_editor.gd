@@ -98,6 +98,8 @@ func _default_ttf_import_settings() -> Dictionary:
 		"stamp_tile": true,
 		"proc_effect": 0, # 0=scanlines,1=bayer,2=checker,3=noise,4=edge tint/bevel
 		"proc_color": Color(1, 1, 1, 1),
+		"padding": 0,
+		"pack_tiebreaker": 0, # 0=prefer wide, 1=prefer tall
 	}
 
 func _load_ttf_import_settings() -> Dictionary:
@@ -117,6 +119,8 @@ func _load_ttf_import_settings() -> Dictionary:
 	defaults["stamp_tile"] = bool(cfg.get_value(SETTINGS_TTF_SECTION, "stamp_tile", defaults["stamp_tile"]))
 	defaults["proc_effect"] = int(cfg.get_value(SETTINGS_TTF_SECTION, "proc_effect", defaults["proc_effect"]))
 	defaults["proc_color"] = Color.from_string(str(cfg.get_value(SETTINGS_TTF_SECTION, "proc_color", defaults["proc_color"].to_html())), defaults["proc_color"])
+	defaults["padding"] = int(cfg.get_value(SETTINGS_TTF_SECTION, "padding", defaults["padding"]))
+	defaults["pack_tiebreaker"] = int(cfg.get_value(SETTINGS_TTF_SECTION, "pack_tiebreaker", defaults["pack_tiebreaker"]))
 	# Backward compat: old configs had gradient_dir but no fill_mode.
 	if defaults["fill_mode"] < 0:
 		defaults["fill_mode"] = 1 if int(defaults["gradient_dir"]) != 0 else 0
@@ -137,6 +141,8 @@ func _save_ttf_import_settings(opts: Dictionary) -> void:
 	cfg.set_value(SETTINGS_TTF_SECTION, "stamp_tile", bool(opts.get("stamp_tile", true)))
 	cfg.set_value(SETTINGS_TTF_SECTION, "proc_effect", int(opts.get("proc_effect", 0)))
 	cfg.set_value(SETTINGS_TTF_SECTION, "proc_color", (opts.get("proc_color", Color.WHITE) as Color).to_html())
+	cfg.set_value(SETTINGS_TTF_SECTION, "padding", int(opts.get("padding", 0)))
+	cfg.set_value(SETTINGS_TTF_SECTION, "pack_tiebreaker", int(opts.get("pack_tiebreaker", 0)))
 	cfg.save(SETTINGS_PATH)
 
 func _apply_ui_tint() -> void:
@@ -605,13 +611,14 @@ func _do_save_png() -> void:
 
 func _on_repack() -> void:
 	if data == null or data.image == null: return
-	var pad := 1
+	var pad := 0
 	var glyphs: Array = []
 	for id in data.sorted_char_ids():
 		var c: Dictionary = data.chars[id]
 		if int(c.get("width", 0)) > 0 and int(c.get("height", 0)) > 0:
 			var d := c.duplicate(); d["id"] = id; glyphs.append(d)
 	glyphs.sort_custom(func(a, b): return int(a.height) > int(b.height) or (int(a.height) == int(b.height) and int(a.width) > int(b.width)))
+	var prefer_wide := int(_load_ttf_import_settings().get("pack_tiebreaker", 0)) == 0
 	var best: Dictionary = {}
 	var best_area := 1 << 60
 	var widths := [64, 128, 256, 512, 768, 1024, 1536, 2048, 4096]
@@ -627,11 +634,21 @@ func _on_repack() -> void:
 		if used_h > h: continue
 		var a: int = w * h
 		var aspect := float(maxi(w, h)) / float(maxi(1, mini(w, h)))
-		var best_score := 1.79769e308
-		if not best.is_empty():
-			best_score = float(best_area) * float(maxi(int(best.w), int(best.h))) / float(maxi(1, mini(int(best.w), int(best.h))))
 		var score := float(a) * aspect
-		if best.is_empty() or score < best_score or (is_equal_approx(score, best_score) and a < best_area):
+		var prefer := best.is_empty()
+		if not prefer:
+			var best_score := float(best_area) * float(maxi(int(best.w), int(best.h))) / float(maxi(1, mini(int(best.w), int(best.h))))
+			if score < best_score - 0.0001:
+				prefer = true
+			elif abs(score - best_score) <= 0.0001:
+				if a < best_area:
+					prefer = true
+				elif a == best_area:
+					var best_land: bool = int(best.w) >= int(best.h)
+					var cand_land: bool = w >= h
+					if cand_land != best_land:
+						prefer = cand_land if prefer_wide else not cand_land
+		if prefer:
 			best_area = a; best = {"w": w, "h": h, "pos": pos}
 	if best.is_empty():
 		_set_status("Repack failed: glyphs don't fit in 4096^2"); return
@@ -927,6 +944,8 @@ func _show_ttf_options(font_path: String) -> void:
 	var grid := GridContainer.new(); grid.columns = 2; vb.add_child(grid)
 	grid.add_child(_lbl("Size")); var sz := SpinBox.new(); sz.min_value = 6; sz.max_value = 128; sz.value = int(saved.get("size", 16)); sz.step = 1; grid.add_child(sz)
 	grid.add_child(_lbl("Filter")); var filt := OptionButton.new(); filt.add_item("Nearest (pixel)", 0); filt.add_item("Linear (smooth)", 1); filt.select(clampi(int(saved.get("filter", 0)), 0, 1)); grid.add_child(filt)
+	grid.add_child(_lbl("Padding (px)")); var pad_sz := SpinBox.new(); pad_sz.min_value = 0; pad_sz.max_value = 32; pad_sz.value = int(saved.get("padding", 0)); pad_sz.step = 1; pad_sz.tooltip_text = "Atlas gap between packed glyphs (0 disables)"; grid.add_child(pad_sz)
+	grid.add_child(_lbl("Atlas tiebreaker")); var tie_dir := OptionButton.new(); tie_dir.add_item("Prefer wide", 0); tie_dir.add_item("Prefer tall", 1); tie_dir.select(clampi(int(saved.get("pack_tiebreaker", 0)), 0, 1)); tie_dir.tooltip_text = "When atlas size candidates tie, prefer landscape (wide) or portrait (tall)"; grid.add_child(tie_dir)
 	grid.add_child(_lbl("Outline (px)")); var outline_sz := SpinBox.new(); outline_sz.min_value = 0; outline_sz.max_value = 8; outline_sz.value = int(saved.get("outline", 0)); outline_sz.step = 1; grid.add_child(outline_sz)
 	grid.add_child(_lbl("Outline color")); var outline_col := ColorPickerButton.new(); outline_col.color = saved.get("outline_color", Color.BLACK); outline_col.custom_minimum_size = Vector2(120, 0); grid.add_child(outline_col)
 	grid.add_child(_lbl("Fill")); var fill_mode := OptionButton.new(); fill_mode.add_item("Solid", 0); fill_mode.add_item("Gradient", 1); fill_mode.add_item("Stamp (image)", 2); fill_mode.add_item("Procedural", 3); fill_mode.select(clampi(int(saved.get("fill_mode", 0)), 0, 3)); grid.add_child(fill_mode)
@@ -951,6 +970,8 @@ func _show_ttf_options(font_path: String) -> void:
 		var defaults := _default_ttf_import_settings()
 		sz.value = int(defaults.get("size", 16))
 		filt.select(clampi(int(defaults.get("filter", 0)), 0, 1))
+		pad_sz.value = int(defaults.get("padding", 0))
+		tie_dir.select(clampi(int(defaults.get("pack_tiebreaker", 0)), 0, 1))
 		outline_sz.value = int(defaults.get("outline", 0))
 		outline_col.color = defaults.get("outline_color", Color.BLACK)
 		fill_mode.select(clampi(int(defaults.get("fill_mode", 0)), 0, 3))
@@ -969,6 +990,8 @@ func _show_ttf_options(font_path: String) -> void:
 			"size": int(sz.value),
 			"charset": chars.text,
 			"filter": int(filt.get_selected_id()),
+			"padding": int(pad_sz.value),
+			"pack_tiebreaker": int(tie_dir.get_selected_id()),
 			"outline": int(outline_sz.value),
 			"outline_color": outline_col.color,
 			"fill_mode": int(fill_mode.get_selected_id()),
@@ -1034,7 +1057,7 @@ func _import_ttf(font_path: String, opts: Dictionary) -> void:
 		for cp in range(32, 127): order.append(cp)
 	# measure glyphs and render via SubViewport
 	await get_tree().process_frame
-	var pad := 2
+	var pad := maxi(0, int(opts.get("padding", 0)))
 	var entries: Array = []
 	# collect metrics using font
 	for cp in order:
@@ -1087,7 +1110,8 @@ func _import_ttf(font_path: String, opts: Dictionary) -> void:
 			var oy := b.position.y - margin
 			rendered.append({"cp": e.cp, "xadv": e.xadv, "w": b.size.x, "h": b.size.y, "img": sub, "ox": ox, "oy": oy})
 	vp.queue_free()
-	_pack_rendered_font(font_path.get_file().get_basename(), font_size, rendered, pad, filter_mode)
+	var prefer_wide := int(opts.get("pack_tiebreaker", 0)) == 0
+	_pack_rendered_font(font_path.get_file().get_basename(), font_size, rendered, pad, filter_mode, prefer_wide)
 
 func _draw_ttf_probe(ci: Control) -> void:
 	if not ci.has_meta("ds"): return
@@ -1175,10 +1199,10 @@ func _apply_procedural_to_bounds(img: Image, b: Rect2i, effect: int, tint: Color
 		return
 	# 4x4 Bayer matrix normalized to [0,1)
 	var bayer := [
-		0.0/16.0, 8.0/16.0, 2.0/16.0, 10.0/16.0,
-		12.0/16.0, 4.0/16.0, 14.0/16.0, 6.0/16.0,
-		3.0/16.0, 11.0/16.0, 1.0/16.0, 9.0/16.0,
-		15.0/16.0, 7.0/16.0, 13.0/16.0, 5.0/16.0,
+		0.0 / 16.0, 8.0 / 16.0, 2.0 / 16.0, 10.0 / 16.0,
+		12.0 / 16.0, 4.0 / 16.0, 14.0 / 16.0, 6.0 / 16.0,
+		3.0 / 16.0, 11.0 / 16.0, 1.0 / 16.0, 9.0 / 16.0,
+		15.0 / 16.0, 7.0 / 16.0, 13.0 / 16.0, 5.0 / 16.0,
 	]
 	var w := img.get_width()
 	var h := img.get_height()
@@ -1220,7 +1244,7 @@ func _apply_procedural_to_bounds(img: Image, b: Rect2i, effect: int, tint: Color
 				out = Color(tint.r * s, tint.g * s, tint.b * s, p.a)
 			elif effect == 1:
 				# Ordered (Bayer) dither: modulate brightness by threshold pattern.
-				var m :int= bayer[posmod(ly, 4) * 4 + posmod(lx, 4)]
+				var m: float = float(bayer[posmod(ly, 4) * 4 + posmod(lx, 4)])
 				var s := 0.45 + 0.55 * m
 				out = Color(tint.r * s, tint.g * s, tint.b * s, p.a)
 			elif effect == 2:
@@ -1247,7 +1271,7 @@ func _apply_procedural_to_bounds(img: Image, b: Rect2i, effect: int, tint: Color
 				out = Color(clampf(base.r * s, 0.0, 1.0), clampf(base.g * s, 0.0, 1.0), clampf(base.b * s, 0.0, 1.0), p.a)
 			img.set_pixel(x, y, out)
 
-func _pack_rendered_font(font_face: String, font_size: int, rendered: Array, pad: int, filter_mode: int = 0) -> void:
+func _pack_rendered_font(font_face: String, font_size: int, rendered: Array, pad: int, filter_mode: int = 0, prefer_wide: bool = true) -> void:
 	var glyphs: Array = []
 	for r in rendered:
 		if int(r.w) > 0 and int(r.h) > 0:
@@ -1267,11 +1291,21 @@ func _pack_rendered_font(font_face: String, font_size: int, rendered: Array, pad
 		if used_h > h: continue
 		var a: int = w * h
 		var aspect := float(maxi(w, h)) / float(maxi(1, mini(w, h)))
-		var best_score := 1.79769e308
-		if not best.is_empty():
-			best_score = float(best_area) * float(maxi(int(best.w), int(best.h))) / float(maxi(1, mini(int(best.w), int(best.h))))
 		var score := float(a) * aspect
-		if best.is_empty() or score < best_score or (is_equal_approx(score, best_score) and a < best_area):
+		var prefer := best.is_empty()
+		if not prefer:
+			var best_score := float(best_area) * float(maxi(int(best.w), int(best.h))) / float(maxi(1, mini(int(best.w), int(best.h))))
+			if score < best_score - 0.0001:
+				prefer = true
+			elif abs(score - best_score) <= 0.0001:
+				if a < best_area:
+					prefer = true
+				elif a == best_area:
+					var best_land: bool = int(best.w) >= int(best.h)
+					var cand_land: bool = w >= h
+					if cand_land != best_land:
+						prefer = cand_land if prefer_wide else not cand_land
+		if prefer:
 			best_area = a; best = {"w": w, "h": h, "pos": pos}
 	if best.is_empty():
 		_set_status("TTF import failed: could not pack atlas"); return
