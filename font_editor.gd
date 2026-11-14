@@ -4,6 +4,7 @@ extends PanelContainer
 const SETTINGS_PATH := "user://settings.cfg"
 const SETTINGS_SECTION := "window"
 const SETTINGS_FULLSCREEN_KEY := "fullscreen"
+const SETTINGS_TTF_SECTION := "ttf_import"
 
 var data: BMFontData
 var atlas: Control
@@ -76,6 +77,40 @@ func _save_window_settings(enabled: bool) -> void:
 	cfg.set_value(SETTINGS_SECTION, SETTINGS_FULLSCREEN_KEY, enabled)
 	cfg.save(SETTINGS_PATH)
 
+func _load_ttf_import_settings() -> Dictionary:
+	var defaults := {
+		"size": 16,
+		"filter": 0,
+		"outline": 0,
+		"outline_color": Color.BLACK,
+		"gradient_dir": 0,
+		"gradient_color1": Color.WHITE,
+		"gradient_color2": Color(0.7, 0.85, 1.0, 1.0),
+	}
+	var cfg := ConfigFile.new()
+	if cfg.load(SETTINGS_PATH) != OK:
+		return defaults
+	defaults["size"] = int(cfg.get_value(SETTINGS_TTF_SECTION, "size", defaults["size"]))
+	defaults["filter"] = int(cfg.get_value(SETTINGS_TTF_SECTION, "filter", defaults["filter"]))
+	defaults["outline"] = int(cfg.get_value(SETTINGS_TTF_SECTION, "outline", defaults["outline"]))
+	defaults["outline_color"] = Color.from_string(str(cfg.get_value(SETTINGS_TTF_SECTION, "outline_color", defaults["outline_color"].to_html())), defaults["outline_color"])
+	defaults["gradient_dir"] = int(cfg.get_value(SETTINGS_TTF_SECTION, "gradient_dir", defaults["gradient_dir"]))
+	defaults["gradient_color1"] = Color.from_string(str(cfg.get_value(SETTINGS_TTF_SECTION, "gradient_color1", defaults["gradient_color1"].to_html())), defaults["gradient_color1"])
+	defaults["gradient_color2"] = Color.from_string(str(cfg.get_value(SETTINGS_TTF_SECTION, "gradient_color2", defaults["gradient_color2"].to_html())), defaults["gradient_color2"])
+	return defaults
+
+func _save_ttf_import_settings(opts: Dictionary) -> void:
+	var cfg := ConfigFile.new()
+	cfg.load(SETTINGS_PATH)
+	cfg.set_value(SETTINGS_TTF_SECTION, "size", int(opts.get("size", 16)))
+	cfg.set_value(SETTINGS_TTF_SECTION, "filter", int(opts.get("filter", 0)))
+	cfg.set_value(SETTINGS_TTF_SECTION, "outline", int(opts.get("outline", 0)))
+	cfg.set_value(SETTINGS_TTF_SECTION, "outline_color", (opts.get("outline_color", Color.BLACK) as Color).to_html())
+	cfg.set_value(SETTINGS_TTF_SECTION, "gradient_dir", int(opts.get("gradient_dir", 0)))
+	cfg.set_value(SETTINGS_TTF_SECTION, "gradient_color1", (opts.get("gradient_color1", Color.WHITE) as Color).to_html())
+	cfg.set_value(SETTINGS_TTF_SECTION, "gradient_color2", (opts.get("gradient_color2", Color.WHITE) as Color).to_html())
+	cfg.save(SETTINGS_PATH)
+
 func _apply_ui_tint() -> void:
 	var accent := Color(0.45, 0.72, 1.0)
 	var accent_dim := Color(0.45, 0.72, 1.0, 0.18)
@@ -92,7 +127,7 @@ func _apply_ui_tint() -> void:
 			sb.border_color = accent_dim
 			add_theme_stylebox_override("panel", sb)
 	if status_lbl:
-		status_lbl.add_theme_color_override("font_color", Color(0.78, 0.86, 0.96, 0.92))
+		status_lbl.add_theme_color_override("font_color", Color(0.78, 0.86, 0.96, 0.92).lerp(accent, 0.12))
 	if stats_lbl:
 		stats_lbl.add_theme_color_override("default_color", Color(0.9, 0.93, 0.98, 0.95))
 
@@ -802,21 +837,22 @@ func _on_import_ttf() -> void:
 	dlg.popup_centered_ratio(0.7)
 
 func _show_ttf_options(font_path: String) -> void:
+	var saved := _load_ttf_import_settings()
 	var d := AcceptDialog.new()
 	d.title = "Import TTF/OTF"
 	d.dialog_hide_on_ok = false
 	var vb := VBoxContainer.new()
 	d.add_child(vb)
 	var grid := GridContainer.new(); grid.columns = 2; vb.add_child(grid)
-	grid.add_child(_lbl("Size")); var sz := SpinBox.new(); sz.min_value = 6; sz.max_value = 128; sz.value = 16; sz.step = 1; grid.add_child(sz)
-	grid.add_child(_lbl("Filter")); var filt := OptionButton.new(); filt.add_item("Nearest (pixel)", 0); filt.add_item("Linear (smooth)", 1); filt.selected = 0; grid.add_child(filt)
-	grid.add_child(_lbl("Outline (px)")); var outline_sz := SpinBox.new(); outline_sz.min_value = 0; outline_sz.max_value = 8; outline_sz.value = 0; outline_sz.step = 1; grid.add_child(outline_sz)
-	grid.add_child(_lbl("Outline color")); var outline_col := ColorPickerButton.new(); outline_col.color = Color.BLACK; outline_col.custom_minimum_size = Vector2(120, 0); grid.add_child(outline_col)
-	grid.add_child(_lbl("Gradient")); var grad_dir := OptionButton.new(); grad_dir.add_item("None", 0); grad_dir.add_item("Vertical", 1); grad_dir.add_item("Horizontal", 2); grad_dir.selected = 0; grid.add_child(grad_dir)
-	grid.add_child(_lbl("Gradient top/left")); var grad_c1 := ColorPickerButton.new(); grad_c1.color = Color.WHITE; grad_c1.custom_minimum_size = Vector2(120, 0); grid.add_child(grad_c1)
-	grid.add_child(_lbl("Gradient bottom/right")); var grad_c2 := ColorPickerButton.new(); grad_c2.color = Color(0.7, 0.85, 1.0, 1.0); grad_c2.custom_minimum_size = Vector2(120, 0); grid.add_child(grad_c2)
+	grid.add_child(_lbl("Size")); var sz := SpinBox.new(); sz.min_value = 6; sz.max_value = 128; sz.value = int(saved.get("size", 16)); sz.step = 1; grid.add_child(sz)
+	grid.add_child(_lbl("Filter")); var filt := OptionButton.new(); filt.add_item("Nearest (pixel)", 0); filt.add_item("Linear (smooth)", 1); filt.select(clampi(int(saved.get("filter", 0)), 0, 1)); grid.add_child(filt)
+	grid.add_child(_lbl("Outline (px)")); var outline_sz := SpinBox.new(); outline_sz.min_value = 0; outline_sz.max_value = 8; outline_sz.value = int(saved.get("outline", 0)); outline_sz.step = 1; grid.add_child(outline_sz)
+	grid.add_child(_lbl("Outline color")); var outline_col := ColorPickerButton.new(); outline_col.color = saved.get("outline_color", Color.BLACK); outline_col.custom_minimum_size = Vector2(120, 0); grid.add_child(outline_col)
+	grid.add_child(_lbl("Gradient")); var grad_dir := OptionButton.new(); grad_dir.add_item("None", 0); grad_dir.add_item("Vertical (top-bottom)", 1); grad_dir.add_item("Horizontal (left-right)", 2); grad_dir.add_item("Diagonal (TL-BR)", 3); grad_dir.add_item("Diagonal (TR-BL)", 4); grad_dir.select(clampi(int(saved.get("gradient_dir", 0)), 0, 4)); grid.add_child(grad_dir)
+	grid.add_child(_lbl("Gradient from")); var grad_c1 := ColorPickerButton.new(); grad_c1.color = saved.get("gradient_color1", Color.WHITE); grad_c1.custom_minimum_size = Vector2(120, 0); grid.add_child(grad_c1)
+	grid.add_child(_lbl("Gradient to")); var grad_c2 := ColorPickerButton.new(); grad_c2.color = saved.get("gradient_color2", Color(0.7, 0.85, 1.0, 1.0)); grad_c2.custom_minimum_size = Vector2(120, 0); grid.add_child(grad_c2)
 	grid.add_child(_lbl("Charset")); var chars := TextEdit.new(); chars.text = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"; chars.custom_minimum_size = Vector2(420, 80); chars.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY; grid.add_child(chars)
-	var info := Label.new(); info.text = "Rasterizes glyphs into a new bitmap atlas. Filter affects preview/texture sampling; outline and gradient are baked into the atlas (gradient tints visible glyph pixels)."; info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; vb.add_child(info)
+	var info := Label.new(); info.text = "Rasterizes glyphs into a new bitmap atlas. Filter affects preview/texture sampling; outline and gradient are baked into the atlas (gradient tints visible glyph pixels). Settings are remembered for next time."; info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; vb.add_child(info)
 	add_child(d)
 	d.confirmed.connect(func():
 		var opts := {
@@ -829,11 +865,12 @@ func _show_ttf_options(font_path: String) -> void:
 			"gradient_color1": grad_c1.color,
 			"gradient_color2": grad_c2.color,
 		}
+		_save_ttf_import_settings(opts)
 		d.queue_free()
 		_import_ttf(font_path, opts)
 	)
 	d.canceled.connect(func(): d.queue_free())
-	d.popup_centered(Vector2i(620, 440))
+	d.popup_centered(Vector2i(640, 460))
 
 func _import_ttf(font_path: String, opts: Dictionary) -> void:
 	var font_size: int = int(opts.get("size", 16))
@@ -961,6 +998,14 @@ func _apply_gradient_to_bounds(img: Image, b: Rect2i, dir: int, c1: Color, c2: C
 				t = 0.0 if b.size.y <= 1 else float(y - b.position.y) / float(b.size.y - 1)
 			elif dir == 2: # horizontal
 				t = 0.0 if b.size.x <= 1 else float(x - b.position.x) / float(b.size.x - 1)
+			elif dir == 3: # diagonal TL -> BR
+				var tx := 0.0 if b.size.x <= 1 else float(x - b.position.x) / float(b.size.x - 1)
+				var ty := 0.0 if b.size.y <= 1 else float(y - b.position.y) / float(b.size.y - 1)
+				t = (tx + ty) * 0.5
+			elif dir == 4: # diagonal TR -> BL
+				var tx := 0.0 if b.size.x <= 1 else float(x - b.position.x) / float(b.size.x - 1)
+				var ty := 0.0 if b.size.y <= 1 else float(y - b.position.y) / float(b.size.y - 1)
+				t = ((1.0 - tx) + ty) * 0.5
 			var gc: Color = c1.lerp(c2, clampf(t, 0.0, 1.0))
 			img.set_pixel(x, y, Color(gc.r, gc.g, gc.b, p.a))
 

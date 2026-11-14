@@ -98,8 +98,8 @@ func _load_page_image() -> Error:
 	if file.is_empty():
 		return ERR_FILE_NOT_FOUND
 	image_path = fnt_path.get_base_dir().path_join(file)
-	var abs := ProjectSettings.globalize_path(image_path) if image_path.begins_with("res://") else image_path
-	image = Image.load_from_file(abs)
+	var abs_path := ProjectSettings.globalize_path(image_path) if image_path.begins_with("res://") else image_path
+	image = Image.load_from_file(abs_path)
 	if image == null:
 		image = Image.load_from_file(fnt_path.get_base_dir().path_join(file))
 	if image == null:
@@ -172,7 +172,7 @@ func get_stats() -> Dictionary:
 	var atlas_h := int(common.get("scaleH", image.get_height() if image else 0))
 	var atlas_area := atlas_w * atlas_h
 	var med := 0
-	if not advances.is_empty(): med = advances[advances.size()/2]
+	if not advances.is_empty(): med = advances[advances.size()/2.0]
 	return {
 		"glyphs": ids.size(),
 		"kern_pairs": kernings.size(),
