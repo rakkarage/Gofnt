@@ -34,11 +34,11 @@ func _ready() -> void:
 	_set_status("Drop-ready: use Open .fnt to load a bitmap font (text BMFont) and its atlas PNG.  Toggle Fullscreen with F11 or the checkbox.")
 
 func _apply_project_default_theme() -> void:
-	var def_path := str(ProjectSettings.get_setting("gui/theme/custom", "res://themes/venice16_x1.tres"))
+	var def_path := str(ProjectSettings.get_setting("gui/theme/custom", "res://theme/venice16_x1.tres"))
 	if def_path != "" and ResourceLoader.exists(def_path):
 		theme = load(def_path)
-	elif ResourceLoader.exists("res://themes/venice16_x1.tres"):
-		theme = load("res://themes/venice16_x1.tres")
+	elif ResourceLoader.exists("res://theme/venice16_x1.tres"):
+		theme = load("res://theme/venice16_x1.tres")
 	preview_scale = 1.0
 	if preview_canvas:
 		preview_canvas.queue_redraw()
@@ -754,9 +754,9 @@ func _detect_glyph_rects(img: Image) -> Array[Rect2i]:
 
 func _example_paths() -> Dictionary:
 	return {
-		1: "res://font/Venice16.fnt",
-		2: "res://font/SuperBlack12.fnt",
-		3: "res://font/SuperWhite12.fnt",
+		1: "res://fnt/Venice16.fnt",
+		2: "res://fnt/SuperBlack12.fnt",
+		3: "res://fnt/SuperWhite12.fnt",
 	}
 
 func _on_load_example(id: int) -> void:
@@ -774,20 +774,20 @@ func _on_load_example(id: int) -> void:
 func _on_apply_example(idx: int) -> void:
 	# 0 none, 1 V@1,2 V@2,3 B@1,4 B@2,5 W@1,6 W@2
 	var theme_map := {
-		1: "res://themes/venice16_x1.tres",
-		2: "res://themes/venice16_x2.tres",
-		3: "res://themes/superblack12_x1.tres",
-		4: "res://themes/superblack12_x2.tres",
-		5: "res://themes/superwhite12_x1.tres",
-		6: "res://themes/superwhite12_x2.tres",
+		1: "res://theme/venice16_x1.tres",
+		2: "res://theme/venice16_x2.tres",
+		3: "res://theme/superblack12_x1.tres",
+		4: "res://theme/superblack12_x2.tres",
+		5: "res://theme/superwhite12_x1.tres",
+		6: "res://theme/superwhite12_x2.tres",
 	}
 	if idx == 0 or not theme_map.has(idx):
-		var def_path := str(ProjectSettings.get_setting("gui/theme/custom", "res://themes/venice16_x1.tres"))
+		var def_path := str(ProjectSettings.get_setting("gui/theme/custom", "res://theme/venice16_x1.tres"))
 		var tdef: Theme = null
 		if def_path != "" and ResourceLoader.exists(def_path):
 			tdef = load(def_path)
-		if tdef == null and ResourceLoader.exists("res://themes/venice16_x1.tres"):
-			tdef = load("res://themes/venice16_x1.tres")
+		if tdef == null and ResourceLoader.exists("res://theme/venice16_x1.tres"):
+			tdef = load("res://theme/venice16_x1.tres")
 		theme = tdef
 		if preview_edit:
 			preview_edit.remove_theme_font_override("font")
@@ -806,14 +806,14 @@ func _on_apply_example(idx: int) -> void:
 	else:
 		# fallback: build at runtime
 		t = Theme.new()
-		var fpath := "res://font/Venice16.fnt"
+		var fpath := "res://fnt/Venice16.fnt"
 		var sz := 16
 		match idx:
-			2: fpath = "res://font/Venice16.fnt"; sz = 32
-			3: fpath = "res://font/SuperBlack12.fnt"; sz = 12
-			4: fpath = "res://font/SuperBlack12.fnt"; sz = 24
-			5: fpath = "res://font/SuperWhite12.fnt"; sz = 12
-			6: fpath = "res://font/SuperWhite12.fnt"; sz = 24
+			2: fpath = "res://fnt/Venice16.fnt"; sz = 32
+			3: fpath = "res://fnt/SuperBlack12.fnt"; sz = 12
+			4: fpath = "res://fnt/SuperBlack12.fnt"; sz = 24
+			5: fpath = "res://fnt/SuperWhite12.fnt"; sz = 12
+			6: fpath = "res://fnt/SuperWhite12.fnt"; sz = 24
 		if ResourceLoader.exists(fpath):
 			t.default_font = load(fpath)
 		t.default_font_size = sz
@@ -824,7 +824,7 @@ func _on_apply_example(idx: int) -> void:
 	# keep canvas preview scale in sync with selection (1x for odd, 2x for even >0)
 	preview_scale = 2.0 if idx % 2 == 0 else 1.0
 	preview_canvas.queue_redraw()
-	_set_status("Applied theme to root: %s (live, no reload needed)" % tpath.get_file())
+	_set_status("Applied theme to root: %s" % tpath.get_file())
 
 func _on_import_ttf() -> void:
 	var dlg := FileDialog.new()
