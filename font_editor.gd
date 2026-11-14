@@ -841,8 +841,18 @@ func _show_ttf_options(font_path: String) -> void:
 	var d := AcceptDialog.new()
 	d.title = "Import TTF/OTF"
 	d.dialog_hide_on_ok = false
+
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(600, 0)
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	d.add_child(scroll)
+
 	var vb := VBoxContainer.new()
-	d.add_child(vb)
+	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vb.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.add_child(vb)
+
 	var grid := GridContainer.new(); grid.columns = 2; vb.add_child(grid)
 	grid.add_child(_lbl("Size")); var sz := SpinBox.new(); sz.min_value = 6; sz.max_value = 128; sz.value = int(saved.get("size", 16)); sz.step = 1; grid.add_child(sz)
 	grid.add_child(_lbl("Filter")); var filt := OptionButton.new(); filt.add_item("Nearest (pixel)", 0); filt.add_item("Linear (smooth)", 1); filt.select(clampi(int(saved.get("filter", 0)), 0, 1)); grid.add_child(filt)
@@ -851,7 +861,8 @@ func _show_ttf_options(font_path: String) -> void:
 	grid.add_child(_lbl("Gradient")); var grad_dir := OptionButton.new(); grad_dir.add_item("None", 0); grad_dir.add_item("Vertical (top-bottom)", 1); grad_dir.add_item("Horizontal (left-right)", 2); grad_dir.add_item("Diagonal (TL-BR)", 3); grad_dir.add_item("Diagonal (TR-BL)", 4); grad_dir.select(clampi(int(saved.get("gradient_dir", 0)), 0, 4)); grid.add_child(grad_dir)
 	grid.add_child(_lbl("Gradient from")); var grad_c1 := ColorPickerButton.new(); grad_c1.color = saved.get("gradient_color1", Color.WHITE); grad_c1.custom_minimum_size = Vector2(120, 0); grid.add_child(grad_c1)
 	grid.add_child(_lbl("Gradient to")); var grad_c2 := ColorPickerButton.new(); grad_c2.color = saved.get("gradient_color2", Color(0.7, 0.85, 1.0, 1.0)); grad_c2.custom_minimum_size = Vector2(120, 0); grid.add_child(grad_c2)
-	grid.add_child(_lbl("Charset")); var chars := TextEdit.new(); chars.text = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"; chars.custom_minimum_size = Vector2(420, 80); chars.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY; grid.add_child(chars)
+	grid.add_child(_lbl("Charset")); var chars := TextEdit.new(); chars.text = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"; chars.custom_minimum_size = Vector2(420, 80); chars.size_flags_vertical = Control.SIZE_FILL; chars.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY; grid.add_child(chars)
+
 	var info := Label.new(); info.text = "Rasterizes glyphs into a new bitmap atlas. Filter affects preview/texture sampling; outline and gradient are baked into the atlas (gradient tints visible glyph pixels). Settings are remembered for next time."; info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; vb.add_child(info)
 	add_child(d)
 	d.confirmed.connect(func():
@@ -870,7 +881,11 @@ func _show_ttf_options(font_path: String) -> void:
 		_import_ttf(font_path, opts)
 	)
 	d.canceled.connect(func(): d.queue_free())
-	d.popup_centered(Vector2i(640, 460))
+
+	var vp_size := get_viewport_rect().size
+	var target_w := mini(640, int(vp_size.x * 0.9))
+	var target_h := mini(460, int(vp_size.y * 0.85))
+	d.popup_centered(Vector2i(maxi(target_w, 320), maxi(target_h, 240)))
 
 func _import_ttf(font_path: String, opts: Dictionary) -> void:
 	var font_size: int = int(opts.get("size", 16))
