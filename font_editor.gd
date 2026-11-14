@@ -1472,12 +1472,48 @@ func _probe_single_font_path(path: String, lines: PackedStringArray) -> bool:
 	lines.append("  BMFontData.load_fnt -> err=%d (%s) | fnt_path=%s image_path=%s chars=%d" % [err, error_string(err) if err == OK or err != OK else str(err), probe.fnt_path, probe.image_path, probe.chars.size()])
 	if err != OK:
 		had_error = true
+		# Even on failure, inspect page/image hints when available.
+		if not probe.pages.is_empty():
+			lines.append("  Parsed pages: %s" % str(probe.pages))
+		if probe.image_path != "":
+			had_error = _probe_image_path(probe.image_path, lines) or had_error
+		else:
+			var pf := ""
+			if not probe.pages.is_empty():
+				pf = str(probe.pages[0].get("file", ""))
+			if pf != "":
+				var guess := path.get_base_dir().path_join(pf)
+				lines.append("  Guessed page image: %s" % guess)
+				had_error = _probe_image_path(guess, lines) or had_error
 	else:
 		lines.append("  Parsed: face=%s pages=%s scale=%sx%s" % [str(probe.info.get("face", "")), str(probe.pages), str(probe.common.get("scaleW", "")), str(probe.common.get("scaleH", ""))])
+		if probe.image_path != "":
+			had_error = _probe_image_path(probe.image_path, lines) or had_error
 		if probe.texture == null or probe.image == null:
 			lines.append("  [!] Parsed but texture/image missing")
 			had_error = true
 	# raw bytes hint
 	var bytes := FileAccess.get_file_as_bytes(path)
 	lines.append("  get_file_as_bytes size=%d" % bytes.size())
+	return had_error
+
+func _probe_image_path(path: String, lines: PackedStringArray) -> bool:
+	var had_error := false
+	var exists := FileAccess.file_exists(path)
+	var bytes := FileAccess.get_file_as_bytes(path)
+	var ferr := -1
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f != null:
+		ferr = OK
+	else:
+		ferr = FileAccess.get_open_error()
+	lines.append("  Image probe: %s | file_exists=%s open_err=%d bytes=%d ResourceLoader.exists=%s" % [path, str(exists), ferr, bytes.size(), str(ResourceLoader.exists(path))])
+	if ResourceLoader.exists(path):
+		var res = ResourceLoader.load(path)
+		lines.append("    ResourceLoader.load type: %s" % (res.get_class() if res != null else "<null>"))
+		if res is Texture2D:
+			var img := (res as Texture2D).get_image()
+			lines.append("    Texture2D.get_image: %s" % ("ok %dx%d" % [img.get_width(), img.get_height()] if img != null else "<null>"))
+	if ferr != OK and bytes.is_empty() and not ResourceLoader.exists(path):
+		had_error = true
 	return had_error

@@ -138,15 +138,19 @@ func _load_image_compat(path: String) -> Image:
 	if path.is_empty():
 		return null
 	if path.begins_with("res://"):
-		# Web/packed exports: avoid globalize_path + load_from_file for res://.
+		# Web/packed exports: prefer ResourceLoader for imported textures/resources.
+		var res = null
 		if ResourceLoader.exists(path):
-			var res = ResourceLoader.load(path)
-			if res is Texture2D:
-				var tex_img := (res as Texture2D).get_image()
-				if tex_img != null:
-					return tex_img.duplicate()
-			elif res is Image:
-				return (res as Image).duplicate()
+			res = ResourceLoader.load(path)
+		if res == null:
+			# Some exports/load paths may still resolve without exists() reporting true.
+			res = load(path)
+		if res is Texture2D:
+			var tex_img := (res as Texture2D).get_image()
+			if tex_img != null:
+				return tex_img.duplicate()
+		elif res is Image:
+			return (res as Image).duplicate()
 		var bytes := FileAccess.get_file_as_bytes(path)
 		if not bytes.is_empty():
 			var img := Image.new()
@@ -170,7 +174,9 @@ func _load_image_compat(path: String) -> Image:
 				return img
 		# Fallback for editor/desktop cases.
 		var abs_path := ProjectSettings.globalize_path(path)
-		return Image.load_from_file(abs_path)
+		if abs_path != "":
+			return Image.load_from_file(abs_path)
+		return null
 	var img := Image.load_from_file(path)
 	if img == null and not path.is_absolute_path():
 		img = Image.load_from_file(ProjectSettings.globalize_path(path))
