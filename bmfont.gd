@@ -98,16 +98,58 @@ func _load_page_image() -> Error:
 	if file.is_empty():
 		return ERR_FILE_NOT_FOUND
 	image_path = fnt_path.get_base_dir().path_join(file)
-	var abs_path := ProjectSettings.globalize_path(image_path) if image_path.begins_with("res://") else image_path
-	image = Image.load_from_file(abs_path)
+	image = _load_image_compat(image_path)
 	if image == null:
-		image = Image.load_from_file(fnt_path.get_base_dir().path_join(file))
+		image = _load_image_compat(fnt_path.get_base_dir().path_join(file))
 	if image == null:
 		return ERR_FILE_CANT_OPEN
 	texture = ImageTexture.create_from_image(image)
 	common["scaleW"] = image.get_width()
 	common["scaleH"] = image.get_height()
 	return OK
+
+func _load_image_compat(path: String) -> Image:
+	if path.is_empty():
+		return null
+	if path.begins_with("res://"):
+		# Web/packed exports: avoid globalize_path + load_from_file for res://.
+		if ResourceLoader.exists(path):
+			var res = ResourceLoader.load(path)
+			if res is Texture2D:
+				var tex_img := (res as Texture2D).get_image()
+				if tex_img != null:
+					return tex_img.duplicate()
+			elif res is Image:
+				return (res as Image).duplicate()
+		if FileAccess.file_exists(path):
+			var bytes := FileAccess.get_file_as_bytes(path)
+			if not bytes.is_empty():
+				var img := Image.new()
+				var lower := path.to_lower()
+				var err := ERR_FILE_UNRECOGNIZED
+				if lower.ends_with(".png"):
+					err = img.load_png_from_buffer(bytes)
+				elif lower.ends_with(".webp"):
+					err = img.load_webp_from_buffer(bytes)
+				elif lower.ends_with(".jpg") or lower.ends_with(".jpeg"):
+					err = img.load_jpg_from_buffer(bytes)
+				elif lower.ends_with(".bmp"):
+					err = img.load_bmp_from_buffer(bytes)
+				else:
+					err = img.load_png_from_buffer(bytes)
+					if err != OK:
+						err = img.load_webp_from_buffer(bytes)
+					if err != OK:
+						err = img.load_jpg_from_buffer(bytes)
+				if err == OK:
+					return img
+		# Fallback for editor/desktop cases.
+		var abs_path := ProjectSettings.globalize_path(path)
+		return Image.load_from_file(abs_path)
+	var img := Image.load_from_file(path)
+	if img == null and not path.is_absolute_path():
+		img = Image.load_from_file(ProjectSettings.globalize_path(path))
+	return img
 
 func sorted_char_ids() -> Array:
 	var ids := chars.keys()

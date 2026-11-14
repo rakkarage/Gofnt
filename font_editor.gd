@@ -831,13 +831,13 @@ func _on_load_example(id: int) -> void:
 	if id <= 0: return
 	var path: String = _example_paths().get(id, "")
 	if path == "": return
-	var abs_path := ProjectSettings.globalize_path(path)
-	var try_path := abs_path if FileAccess.file_exists(abs_path) else path
-	_load_font(try_path)
+	# Prefer the res:// path directly (works in editor and packed/web exports).
+	_load_font(path)
 	if data == null or data.image == null:
-		# fallback: try the other form
-		var alt := path if try_path == abs_path else abs_path
-		_load_font(alt)
+		# Desktop fallback in case a globalized path is needed.
+		var abs_path := ProjectSettings.globalize_path(path)
+		if abs_path != path:
+			_load_font(abs_path)
 
 func _on_apply_example(idx: int) -> void:
 	# 0 none, 1 V@1,2 V@2,3 B@1,4 B@2,5 W@1,6 W@2
