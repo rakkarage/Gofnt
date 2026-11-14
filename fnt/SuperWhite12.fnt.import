@@ -1,0 +1,17 @@
+[remap]
+
+importer="font_data_bmfont"
+type="FontFile"
+uid="uid://vxvgk6iccvf3"
+path="res://.godot/imported/SuperWhite12.fnt-f3434e961c93b30d97506bd72824bf67.fontdata"
+
+[deps]
+
+source_file="res://fnt/SuperWhite12.fnt"
+dest_files=["res://.godot/imported/SuperWhite12.fnt-f3434e961c93b30d97506bd72824bf67.fontdata"]
+
+[params]
+
+fallbacks=[]
+compress=true
+scaling_mode=1

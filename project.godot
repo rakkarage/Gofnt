@@ -17,7 +17,7 @@ config/icon="res://icon.svg"
 
 [gui]
 
-theme/custom="res://themes/venice16_x1.tres"
+theme/custom="res://theme/venice16_x1.tres"
 
 [physics]
 
