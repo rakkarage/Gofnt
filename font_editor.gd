@@ -28,6 +28,9 @@ var apply_dd: OptionButton
 var preview_scale: float = 2.0
 var sel_id: int = -1
 var _updating_ui := false
+var _ui_tinted := false
+const STATUS_ERROR_COLOR := Color(1.0, 0.42, 0.42, 1.0)
+const STATUS_WARN_COLOR := Color(1.0, 0.82, 0.45, 1.0)
 
 func _ready() -> void:
 	name = "Gofnt"
@@ -160,13 +163,15 @@ func _apply_ui_tint() -> void:
 			sb.border_width_right = 1
 			sb.border_color = accent_dim
 			add_theme_stylebox_override("panel", sb)
+	_ui_tinted = true
 	if status_lbl:
-		status_lbl.add_theme_color_override("font_color", Color(0.78, 0.86, 0.96, 0.92).lerp(accent, 0.12))
+		status_lbl.add_theme_color_override("font_color", _status_normal_color())
 	if stats_lbl:
 		stats_lbl.add_theme_color_override("default_color", Color(0.9, 0.93, 0.98, 0.95))
 
 func _clear_ui_tint() -> void:
 	remove_theme_stylebox_override("panel")
+	_ui_tinted = false
 	if status_lbl:
 		status_lbl.remove_theme_color_override("font_color")
 	if stats_lbl:
@@ -177,6 +182,25 @@ func _clear_ui_tint() -> void:
 		apply_demo_lbl.remove_theme_color_override("font_color")
 	if preview_lbl:
 		preview_lbl.remove_theme_color_override("font_color")
+
+func _status_normal_color() -> Color:
+	if _ui_tinted:
+		var accent := Color(0.45, 0.72, 1.0)
+		return Color(0.78, 0.86, 0.96, 0.92).lerp(accent, 0.12)
+	return get_theme_color("font_color", "Label") if has_theme_color("font_color", "Label") else Color(0.88, 0.88, 0.88, 1.0)
+
+func _set_status(t: String, is_error: bool = false, is_warn: bool = false) -> void:
+	if status_lbl == null:
+		return
+	status_lbl.text = t
+	if is_error:
+		status_lbl.add_theme_color_override("font_color", STATUS_ERROR_COLOR)
+	elif is_warn:
+		status_lbl.add_theme_color_override("font_color", STATUS_WARN_COLOR)
+	elif _ui_tinted:
+		status_lbl.add_theme_color_override("font_color", _status_normal_color())
+	else:
+		status_lbl.remove_theme_color_override("font_color")
 
 func _build_ui() -> void:
 	var root := HBoxContainer.new()
@@ -198,6 +222,7 @@ func _build_ui() -> void:
 	var open_ttf_btn := Button.new(); open_ttf_btn.text = "Import TTF/OTF"; open_ttf_btn.tooltip_text = "Generate a bitmap font atlas from a TTF/OTF at a chosen size (basic rasterization)"; open_ttf_btn.pressed.connect(_on_import_ttf); bar.add_child(open_ttf_btn)
 	var save_fnt_btn := Button.new(); save_fnt_btn.text = "Save .fnt"; save_fnt_btn.tooltip_text = "Save BMFont data to the loaded .fnt path"; save_fnt_btn.pressed.connect(_on_save_fnt); bar.add_child(save_fnt_btn)
 	var save_png_btn := Button.new(); save_png_btn.text = "Save PNG"; save_png_btn.tooltip_text = "Save atlas image to the loaded PNG path"; save_png_btn.pressed.connect(_on_save_png); bar.add_child(save_png_btn)
+	var probe_btn := Button.new(); probe_btn.text = "Probe Fonts"; probe_btn.tooltip_text = "Run diagnostics on bundled/example font files (paths, file access, parsing) to help debug web/export loading issues"; probe_btn.pressed.connect(_on_probe_fonts); bar.add_child(probe_btn)
 	bar.add_child(VSeparator.new())
 	var autoslice_btn := Button.new(); autoslice_btn.text = "Trim selected"; autoslice_btn.tooltip_text = "Trim selected glyph rect to non-transparent bounds"; autoslice_btn.pressed.connect(_on_autoslice_selected); bar.add_child(autoslice_btn)
 	var autoslice_all_btn := Button.new(); autoslice_all_btn.text = "Trim all"; autoslice_all_btn.tooltip_text = "Trim all glyph rects to non-transparent bounds (does not detect new glyphs)"; autoslice_all_btn.pressed.connect(_on_autoslice_all); bar.add_child(autoslice_all_btn)
@@ -358,7 +383,7 @@ func _on_open() -> void:
 func _load_font(path: String) -> void:
 	var err := data.load_fnt(path)
 	if err != OK:
-		_set_status("Failed to load: %s (err %d)" % [path, err]); return
+		_set_status("Failed to load: %s (err %d)" % [path, err], true); return
 	atlas.set_data(data)
 	_updating_ui = true
 	font_line_h.value = int(data.common.get("lineHeight", 16))
@@ -582,7 +607,7 @@ func _do_save_fnt() -> void:
 	var err := data.save_fnt(data.fnt_path)
 	if err == OK and not data.pages.is_empty():
 		data.pages[0]["file"] = data.fnt_path.get_file().get_basename() + ".png"
-	_set_status("Saved .fnt to %s" % data.fnt_path if err == OK else "Save failed: %d" % err)
+	_set_status("Saved .fnt to %s" % data.fnt_path if err == OK else "Save failed: %d" % err, err != OK)
 
 func _on_save_png() -> void:
 	if data == null or data.image == null:
@@ -607,7 +632,7 @@ func _on_save_png() -> void:
 
 func _do_save_png() -> void:
 	var err := data.save_png(data.image_path)
-	_set_status("Saved PNG to %s" % data.image_path if err == OK else "Save failed: %d" % err)
+	_set_status("Saved PNG to %s" % data.image_path if err == OK else "Save failed: %d" % err, err != OK)
 
 func _on_repack() -> void:
 	if data == null or data.image == null: return
@@ -651,7 +676,7 @@ func _on_repack() -> void:
 		if prefer:
 			best_area = a; best = {"w": w, "h": h, "pos": pos}
 	if best.is_empty():
-		_set_status("Repack failed: glyphs don't fit in 4096^2"); return
+		_set_status("Repack failed: glyphs don't fit in 4096^2", true); return
 	var nw: int = best.w; var nh: int = best.h
 	var img := Image.create(nw, nh, false, data.image.get_format())
 	img.fill(Color(0, 0, 0, 0))
@@ -705,7 +730,7 @@ func _alpha_bounds_in_rect(r: Rect2i) -> Rect2i:
 	return Rect2i(minx, miny, maxx - minx + 1, maxy - miny + 1)
 
 func _on_autoslice_selected() -> void:
-	if sel_id == -1 or not data.chars.has(sel_id): _set_status("Select a glyph first"); return
+	if sel_id == -1 or not data.chars.has(sel_id): _set_status("Select a glyph first", false, true); return
 	var c: Dictionary = data.chars[sel_id]
 	var r := Rect2i(int(c.get("x", 0)), int(c.get("y", 0)), int(c.get("width", 0)), int(c.get("height", 0)))
 	var nb := _alpha_bounds_in_rect(r)
@@ -755,7 +780,7 @@ func _on_import_image() -> void:
 func _import_image(path: String) -> void:
 	var img := Image.load_from_file(path)
 	if img == null:
-		_set_status("Failed to load image: %s" % path); return
+		_set_status("Failed to load image: %s" % path, true); return
 	data.clear()
 	data.image = img
 	data.texture = ImageTexture.create_from_image(img)
@@ -1038,10 +1063,10 @@ func _import_ttf(font_path: String, opts: Dictionary) -> void:
 		stamp_img = Image.new()
 		var serr := stamp_img.load(stamp_path)
 		if serr != OK:
-			_set_status("Failed to load stamp image: %s" % stamp_path)
+			_set_status("Failed to load stamp image: %s" % stamp_path, true)
 			stamp_img = null
 	if fill_mode == 2 and stamp_img == null:
-		_set_status("Stamp fill selected but no valid stamp image; using solid fill.")
+		_set_status("Stamp fill selected but no valid stamp image; using solid fill.", false, true)
 		fill_mode = 0
 	var font := FontFile.new()
 	var err := font.load_dynamic_font(font_path)
@@ -1049,7 +1074,7 @@ func _import_ttf(font_path: String, opts: Dictionary) -> void:
 		# try loading as resource/data
 		var bytes := FileAccess.get_file_as_bytes(font_path)
 		if bytes.size() == 0:
-			_set_status("Failed to load TTF/OTF: %s" % font_path); return
+			_set_status("Failed to load TTF/OTF: %s" % font_path, true); return
 		font.data = bytes
 	var unique: Dictionary = {}
 	var order: Array[int] = []
@@ -1313,7 +1338,7 @@ func _pack_rendered_font(font_face: String, font_size: int, rendered: Array, pad
 		if prefer:
 			best_area = a; best = {"w": w, "h": h, "pos": pos}
 	if best.is_empty():
-		_set_status("TTF import failed: could not pack atlas"); return
+		_set_status("TTF import failed: could not pack atlas", true); return
 	var nw: int = best.w; var nh: int = best.h
 	var img := Image.create(nw, nh, false, Image.FORMAT_RGBA8)
 	img.fill(Color(0, 0, 0, 0))
@@ -1360,3 +1385,110 @@ func _try_pack_ttf(glyphs: Array, W: int, H: int, pad: int) -> Array:
 		x += gw + pad
 		row_h = maxi(row_h, gh)
 	return out
+
+func _on_probe_fonts() -> void:
+	var report := _probe_fonts_report()
+	_set_status("Font probe complete — see diagnostics dialog", report.has("had_error") and bool(report.had_error))
+	var d := AcceptDialog.new()
+	d.title = "Font Probe Diagnostics"
+	d.dialog_hide_on_ok = true
+	var vb := VBoxContainer.new()
+	vb.custom_minimum_size = Vector2(820, 520)
+	d.add_child(vb)
+	var info := Label.new()
+	info.text = "Diagnostics for bundled .fnt loading (helps debug web/export issues like err 12 = ERR_FILE_CANT_OPEN)."
+	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vb.add_child(info)
+	var out := RichTextLabel.new()
+	out.bbcode_enabled = false
+	out.selection_enabled = true
+	out.scroll_following = false
+	out.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	out.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	out.text = str(report.get("text", ""))
+	vb.add_child(out)
+	add_child(d)
+	d.canceled.connect(func(): d.queue_free())
+	d.confirmed.connect(func(): d.queue_free())
+	d.popup_centered(Vector2i(900, 620))
+
+func _probe_fonts_report() -> Dictionary:
+	var lines: PackedStringArray = []
+	var had_error := false
+	lines.append("Platform: %s" % OS.get_name())
+	lines.append("OS.has_feature(\"web\"): %s" % str(OS.has_feature("web")))
+	lines.append("OS.has_feature(\"template\"): %s" % str(OS.has_feature("template")))
+	lines.append("ProjectSettings.globalize_path(\"res://\"): %s" % ProjectSettings.globalize_path("res://"))
+	lines.append("")
+	var paths: PackedStringArray = []
+	for p in _example_paths().values():
+		if not paths.has(str(p)):
+			paths.append(str(p))
+	# also scan res://fnt for any .fnt files (best-effort)
+	var dir := DirAccess.open("res://fnt")
+	if dir != null:
+		dir.list_dir_begin()
+		var fn := dir.get_next()
+		while fn != "":
+			if not dir.current_is_dir() and fn.to_lower().ends_with(".fnt"):
+				var fp := "res://fnt/" + fn
+				if not paths.has(fp):
+					paths.append(fp)
+			fn = dir.get_next()
+		dir.list_dir_end()
+	else:
+		lines.append("[!] Could not open DirAccess for res://fnt (open error: %d)" % DirAccess.get_open_error())
+		lines.append("")
+	if paths.is_empty():
+		lines.append("No .fnt paths discovered to probe.")
+		return {"text": "\n".join(lines), "had_error": true}
+	for path in paths:
+		lines.append("=== %s ===" % path)
+		var perr := _probe_single_font_path(path, lines)
+		if perr:
+			had_error = true
+		lines.append("")
+	return {"text": "\n".join(lines), "had_error": had_error}
+
+func _probe_single_font_path(path: String, lines: PackedStringArray) -> bool:
+	var had_error := false
+	var variants: PackedStringArray = [path]
+	if not path.ends_with(".txt"):
+		variants.append(path + ".txt")
+		variants.append(path.get_basename() + ".txt")
+	for p in variants:
+		if p == path:
+			continue
+		# listed as probe candidates; existence shown below
+		pass
+	for p in [path, path + ".txt"]:
+		var exists := FileAccess.file_exists(p)
+		var open_err := -1
+		var f := FileAccess.open(p, FileAccess.READ)
+		if f != null:
+			open_err = OK
+			var txt := f.get_as_text()
+			var preview := txt.substr(0, 80).replace("\n", "\\n")
+			lines.append("  FileAccess open: %s | exists=%s open_err=%s len=%d preview=%s" % [p, str(exists), str(open_err), txt.length(), preview])
+		else:
+			open_err = FileAccess.get_open_error()
+			lines.append("  FileAccess open: %s | exists=%s open_err=%d" % [p, str(exists), open_err])
+	lines.append("  ResourceLoader.exists(%s): %s" % [path, str(ResourceLoader.exists(path))])
+	if ResourceLoader.exists(path):
+		var res = ResourceLoader.load(path)
+		lines.append("  ResourceLoader.load type: %s" % (res.get_class() if res != null else "<null>"))
+	# Try BMFontData.load_fnt simulation
+	var probe := BMFontData.new()
+	var err := probe.load_fnt(path)
+	lines.append("  BMFontData.load_fnt -> err=%d (%s) | fnt_path=%s image_path=%s chars=%d" % [err, error_string(err) if err == OK or err != OK else str(err), probe.fnt_path, probe.image_path, probe.chars.size()])
+	if err != OK:
+		had_error = true
+	else:
+		lines.append("  Parsed: face=%s pages=%s scale=%sx%s" % [str(probe.info.get("face", "")), str(probe.pages), str(probe.common.get("scaleW", "")), str(probe.common.get("scaleH", ""))])
+		if probe.texture == null or probe.image == null:
+			lines.append("  [!] Parsed but texture/image missing")
+			had_error = true
+	# raw bytes hint
+	var bytes := FileAccess.get_file_as_bytes(path)
+	lines.append("  get_file_as_bytes size=%d" % bytes.size())
+	return had_error
