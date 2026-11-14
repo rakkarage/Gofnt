@@ -1,6 +1,24 @@
 [gd_scene format=3 uid="uid://dq7ganp23k30e"]
 
 [ext_resource type="Script" uid="uid://ci23ybeyqwbpu" path="res://font_editor.gd" id="1"]
+[ext_resource type="Theme" path="res://theme/venice16_x1.tres" id="1_66v0l"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_wuqaj"]
+content_margin_left = 0.0
+content_margin_top = 0.0
+content_margin_right = 0.0
+content_margin_bottom = 0.0
+bg_color = Color(0.117325, 0.128875, 0.151975, 0.83100003)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.45, 0.72, 1, 0.18)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+corner_detail = 5
 
 [node name="Gofnt" type="PanelContainer" unique_id=484314587]
 anchors_preset = 15
@@ -8,4 +26,6 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+theme = ExtResource("1_66v0l")
+theme_override_styles/panel = SubResource("StyleBoxFlat_wuqaj")
 script = ExtResource("1")

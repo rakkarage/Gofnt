@@ -93,6 +93,11 @@ func _load_ttf_import_settings() -> Dictionary:
 		"gradient_dir": 0,
 		"gradient_color1": Color.WHITE,
 		"gradient_color2": Color(0.7, 0.85, 1.0, 1.0),
+		"fill_mode": 0, # 0=solid, 1=gradient, 2=stamp(image), 3=procedural
+		"stamp_path": "",
+		"stamp_tile": true,
+		"proc_effect": 0, # 0=scanlines,1=bayer,2=checker,3=noise,4=edge tint/bevel
+		"proc_color": Color(1, 1, 1, 1),
 	}
 	var cfg := ConfigFile.new()
 	if cfg.load(SETTINGS_PATH) != OK:
@@ -104,6 +109,14 @@ func _load_ttf_import_settings() -> Dictionary:
 	defaults["gradient_dir"] = int(cfg.get_value(SETTINGS_TTF_SECTION, "gradient_dir", defaults["gradient_dir"]))
 	defaults["gradient_color1"] = Color.from_string(str(cfg.get_value(SETTINGS_TTF_SECTION, "gradient_color1", defaults["gradient_color1"].to_html())), defaults["gradient_color1"])
 	defaults["gradient_color2"] = Color.from_string(str(cfg.get_value(SETTINGS_TTF_SECTION, "gradient_color2", defaults["gradient_color2"].to_html())), defaults["gradient_color2"])
+	defaults["fill_mode"] = int(cfg.get_value(SETTINGS_TTF_SECTION, "fill_mode", -1))
+	defaults["stamp_path"] = str(cfg.get_value(SETTINGS_TTF_SECTION, "stamp_path", defaults["stamp_path"]))
+	defaults["stamp_tile"] = bool(cfg.get_value(SETTINGS_TTF_SECTION, "stamp_tile", defaults["stamp_tile"]))
+	defaults["proc_effect"] = int(cfg.get_value(SETTINGS_TTF_SECTION, "proc_effect", defaults["proc_effect"]))
+	defaults["proc_color"] = Color.from_string(str(cfg.get_value(SETTINGS_TTF_SECTION, "proc_color", defaults["proc_color"].to_html())), defaults["proc_color"])
+	# Backward compat: old configs had gradient_dir but no fill_mode.
+	if defaults["fill_mode"] < 0:
+		defaults["fill_mode"] = 1 if int(defaults["gradient_dir"]) != 0 else 0
 	return defaults
 
 func _save_ttf_import_settings(opts: Dictionary) -> void:
@@ -116,6 +129,11 @@ func _save_ttf_import_settings(opts: Dictionary) -> void:
 	cfg.set_value(SETTINGS_TTF_SECTION, "gradient_dir", int(opts.get("gradient_dir", 0)))
 	cfg.set_value(SETTINGS_TTF_SECTION, "gradient_color1", (opts.get("gradient_color1", Color.WHITE) as Color).to_html())
 	cfg.set_value(SETTINGS_TTF_SECTION, "gradient_color2", (opts.get("gradient_color2", Color.WHITE) as Color).to_html())
+	cfg.set_value(SETTINGS_TTF_SECTION, "fill_mode", int(opts.get("fill_mode", 0)))
+	cfg.set_value(SETTINGS_TTF_SECTION, "stamp_path", str(opts.get("stamp_path", "")))
+	cfg.set_value(SETTINGS_TTF_SECTION, "stamp_tile", bool(opts.get("stamp_tile", true)))
+	cfg.set_value(SETTINGS_TTF_SECTION, "proc_effect", int(opts.get("proc_effect", 0)))
+	cfg.set_value(SETTINGS_TTF_SECTION, "proc_color", (opts.get("proc_color", Color.WHITE) as Color).to_html())
 	cfg.save(SETTINGS_PATH)
 
 func _apply_ui_tint() -> void:
@@ -906,12 +924,23 @@ func _show_ttf_options(font_path: String) -> void:
 	grid.add_child(_lbl("Filter")); var filt := OptionButton.new(); filt.add_item("Nearest (pixel)", 0); filt.add_item("Linear (smooth)", 1); filt.select(clampi(int(saved.get("filter", 0)), 0, 1)); grid.add_child(filt)
 	grid.add_child(_lbl("Outline (px)")); var outline_sz := SpinBox.new(); outline_sz.min_value = 0; outline_sz.max_value = 8; outline_sz.value = int(saved.get("outline", 0)); outline_sz.step = 1; grid.add_child(outline_sz)
 	grid.add_child(_lbl("Outline color")); var outline_col := ColorPickerButton.new(); outline_col.color = saved.get("outline_color", Color.BLACK); outline_col.custom_minimum_size = Vector2(120, 0); grid.add_child(outline_col)
-	grid.add_child(_lbl("Gradient")); var grad_dir := OptionButton.new(); grad_dir.add_item("None", 0); grad_dir.add_item("Vertical (top-bottom)", 1); grad_dir.add_item("Horizontal (left-right)", 2); grad_dir.add_item("Diagonal (TL-BR)", 3); grad_dir.add_item("Diagonal (TR-BL)", 4); grad_dir.select(clampi(int(saved.get("gradient_dir", 0)), 0, 4)); grid.add_child(grad_dir)
+	grid.add_child(_lbl("Fill")); var fill_mode := OptionButton.new(); fill_mode.add_item("Solid", 0); fill_mode.add_item("Gradient", 1); fill_mode.add_item("Stamp (image)", 2); fill_mode.add_item("Procedural", 3); fill_mode.select(clampi(int(saved.get("fill_mode", 0)), 0, 3)); grid.add_child(fill_mode)
+	grid.add_child(_lbl("Gradient")); var grad_dir := OptionButton.new(); grad_dir.add_item("Vertical (top-bottom)", 1); grad_dir.add_item("Horizontal (left-right)", 2); grad_dir.add_item("Diagonal (TL-BR)", 3); grad_dir.add_item("Diagonal (TR-BL)", 4); grad_dir.select(clampi(int(saved.get("gradient_dir", 1)), 1, 4)); grid.add_child(grad_dir)
 	grid.add_child(_lbl("Gradient from")); var grad_c1 := ColorPickerButton.new(); grad_c1.color = saved.get("gradient_color1", Color.WHITE); grad_c1.custom_minimum_size = Vector2(120, 0); grid.add_child(grad_c1)
 	grid.add_child(_lbl("Gradient to")); var grad_c2 := ColorPickerButton.new(); grad_c2.color = saved.get("gradient_color2", Color(0.7, 0.85, 1.0, 1.0)); grad_c2.custom_minimum_size = Vector2(120, 0); grid.add_child(grad_c2)
+	grid.add_child(_lbl("Stamp image")); var stamp_row := HBoxContainer.new(); stamp_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL; var stamp_path := LineEdit.new(); stamp_path.text = str(saved.get("stamp_path", "")); stamp_path.placeholder_text = "Path to image (png, jpg, webp...)"; stamp_path.size_flags_horizontal = Control.SIZE_EXPAND_FILL; stamp_row.add_child(stamp_path); var stamp_browse := Button.new(); stamp_browse.text = "Browse…"; stamp_row.add_child(stamp_browse); grid.add_child(stamp_row)
+	grid.add_child(_lbl("Stamp mapping")); var stamp_tile := OptionButton.new(); stamp_tile.add_item("Tile", 0); stamp_tile.add_item("Fit to glyph", 1); stamp_tile.select(0 if bool(saved.get("stamp_tile", true)) else 1); grid.add_child(stamp_tile)
+	grid.add_child(_lbl("Procedural effect")); var proc_effect := OptionButton.new(); proc_effect.add_item("Scanlines", 0); proc_effect.add_item("Bayer dither", 1); proc_effect.add_item("Checker", 2); proc_effect.add_item("Noise grain", 3); proc_effect.add_item("Edge tint / bevel", 4); proc_effect.select(clampi(int(saved.get("proc_effect", 0)), 0, 4)); grid.add_child(proc_effect)
+	grid.add_child(_lbl("Procedural color")); var proc_color := ColorPickerButton.new(); proc_color.color = saved.get("proc_color", Color.WHITE); proc_color.custom_minimum_size = Vector2(120, 0); grid.add_child(proc_color)
 	grid.add_child(_lbl("Charset")); var chars := TextEdit.new(); chars.text = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"; chars.custom_minimum_size = Vector2(420, 80); chars.size_flags_vertical = Control.SIZE_FILL; chars.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY; grid.add_child(chars)
 
-	var info := Label.new(); info.text = "Rasterizes glyphs into a new bitmap atlas. Filter affects preview/texture sampling; outline and gradient are baked into the atlas (gradient tints visible glyph pixels). Settings are remembered for next time."; info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; vb.add_child(info)
+	var info := Label.new(); info.text = "Rasterizes glyphs into a new bitmap atlas. Filter affects preview/texture sampling; outline, gradient, image stamps, and procedural effects are baked into the atlas (tinting visible glyph pixels). Settings are remembered for next time."; info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; vb.add_child(info)
+
+	var stamp_fd := FileDialog.new(); stamp_fd.file_mode = FileDialog.FILE_MODE_OPEN_FILE; stamp_fd.access = FileDialog.ACCESS_FILESYSTEM; stamp_fd.filters = PackedStringArray(["*.png,*.jpg,*.jpeg,*.webp,*.bmp ; Image files"]); stamp_fd.title = "Choose Stamp Image"
+	stamp_fd.file_selected.connect(func(path): stamp_path.text = path)
+	d.add_child(stamp_fd)
+	stamp_browse.pressed.connect(func(): stamp_fd.popup_centered(Vector2i(700, 500)))
+
 	add_child(d)
 	d.confirmed.connect(func():
 		var opts := {
@@ -920,9 +949,14 @@ func _show_ttf_options(font_path: String) -> void:
 			"filter": int(filt.get_selected_id()),
 			"outline": int(outline_sz.value),
 			"outline_color": outline_col.color,
+			"fill_mode": int(fill_mode.get_selected_id()),
 			"gradient_dir": int(grad_dir.get_selected_id()),
 			"gradient_color1": grad_c1.color,
 			"gradient_color2": grad_c2.color,
+			"stamp_path": stamp_path.text.strip_edges(),
+			"stamp_tile": stamp_tile.get_selected_id() == 0,
+			"proc_effect": int(proc_effect.get_selected_id()),
+			"proc_color": proc_color.color,
 		}
 		_save_ttf_import_settings(opts)
 		d.queue_free()
@@ -941,9 +975,24 @@ func _import_ttf(font_path: String, opts: Dictionary) -> void:
 	var filter_mode: int = int(opts.get("filter", 0))
 	var outline_px: int = int(opts.get("outline", 0))
 	var outline_color: Color = opts.get("outline_color", Color.BLACK)
-	var gradient_dir: int = int(opts.get("gradient_dir", 0))
+	var fill_mode: int = int(opts.get("fill_mode", 0))
+	var gradient_dir: int = int(opts.get("gradient_dir", 1))
 	var gradient_color1: Color = opts.get("gradient_color1", Color.WHITE)
 	var gradient_color2: Color = opts.get("gradient_color2", Color.WHITE)
+	var stamp_path: String = str(opts.get("stamp_path", "")).strip_edges()
+	var stamp_tile: bool = bool(opts.get("stamp_tile", true))
+	var proc_effect: int = int(opts.get("proc_effect", 0))
+	var proc_color: Color = opts.get("proc_color", Color.WHITE)
+	var stamp_img: Image = null
+	if fill_mode == 2 and stamp_path != "":
+		stamp_img = Image.new()
+		var serr := stamp_img.load(stamp_path)
+		if serr != OK:
+			_set_status("Failed to load stamp image: %s" % stamp_path)
+			stamp_img = null
+	if fill_mode == 2 and stamp_img == null:
+		_set_status("Stamp fill selected but no valid stamp image; using solid fill.")
+		fill_mode = 0
 	var font := FontFile.new()
 	var err := font.load_dynamic_font(font_path)
 	if err != OK:
@@ -1005,8 +1054,12 @@ func _import_ttf(font_path: String, opts: Dictionary) -> void:
 		if b.size.x <= 0 or b.size.y <= 0:
 			rendered.append({"cp": e.cp, "xadv": e.xadv, "w": 0, "h": 0, "img": null, "ox": 0, "oy": 0})
 		else:
-			if gradient_dir != 0:
+			if fill_mode == 1:
 				_apply_gradient_to_bounds(img, b, gradient_dir, gradient_color1, gradient_color2)
+			elif fill_mode == 2 and stamp_img != null:
+				_apply_stamp_to_bounds(img, b, stamp_img, stamp_tile)
+			elif fill_mode == 3:
+				_apply_procedural_to_bounds(img, b, proc_effect, proc_color)
 			var sub := img.get_region(b)
 			var ox := b.position.x - margin
 			var oy := b.position.y - margin
@@ -1071,6 +1124,106 @@ func _apply_gradient_to_bounds(img: Image, b: Rect2i, dir: int, c1: Color, c2: C
 				t = ((1.0 - tx) + ty) * 0.5
 			var gc: Color = c1.lerp(c2, clampf(t, 0.0, 1.0))
 			img.set_pixel(x, y, Color(gc.r, gc.g, gc.b, p.a))
+
+func _apply_stamp_to_bounds(img: Image, b: Rect2i, stamp: Image, tile: bool) -> void:
+	if b.size.x <= 0 or b.size.y <= 0: return
+	var sw := stamp.get_width()
+	var sh := stamp.get_height()
+	if sw <= 0 or sh <= 0:
+		return
+	for y in range(b.position.y, b.position.y + b.size.y):
+		for x in range(b.position.x, b.position.x + b.size.x):
+			var p := img.get_pixel(x, y)
+			if p.a <= 0.01:
+				continue
+			var sx: int
+			var sy: int
+			if tile:
+				sx = posmod(x, sw)
+				sy = posmod(y, sh)
+			else:
+				sx = 0 if b.size.x <= 1 else int(round(float(x - b.position.x) / float(b.size.x - 1) * float(sw - 1)))
+				sy = 0 if b.size.y <= 1 else int(round(float(y - b.position.y) / float(b.size.y - 1) * float(sh - 1)))
+			var sc := stamp.get_pixel(clampi(sx, 0, sw - 1), clampi(sy, 0, sh - 1))
+			# "Stamp" onto glyph: use stamp color, preserve glyph alpha (baked like gradients).
+			img.set_pixel(x, y, Color(sc.r, sc.g, sc.b, p.a))
+
+func _apply_procedural_to_bounds(img: Image, b: Rect2i, effect: int, tint: Color) -> void:
+	if b.size.x <= 0 or b.size.y <= 0:
+		return
+	# 4x4 Bayer matrix normalized to [0,1)
+	var bayer := [
+		0.0/16.0, 8.0/16.0, 2.0/16.0, 10.0/16.0,
+		12.0/16.0, 4.0/16.0, 14.0/16.0, 6.0/16.0,
+		3.0/16.0, 11.0/16.0, 1.0/16.0, 9.0/16.0,
+		15.0/16.0, 7.0/16.0, 13.0/16.0, 5.0/16.0,
+	]
+	var w := img.get_width()
+	var h := img.get_height()
+	# Precompute a simple edge-distance approximation for bevel/edge tint.
+	var edge_dist: Dictionary = {}
+	if effect == 4:
+		for y in range(b.position.y, b.position.y + b.size.y):
+			for x in range(b.position.x, b.position.x + b.size.x):
+				if img.get_pixel(x, y).a <= 0.01:
+					continue
+				var d := 99
+				# Manhattan-ish search radius 3 for a cheap inner distance estimate.
+				for r in range(1, 4):
+					var on_edge := false
+					var nx: Array[int] = [x - r, x + r, x, x]
+					var ny: Array[int] = [y, y, y - r, y + r]
+					for i in 4:
+						var px: int = nx[i]
+						var py: int = ny[i]
+						if px < 0 or py < 0 or px >= w or py >= h or img.get_pixel(px, py).a <= 0.01:
+							on_edge = true
+							break
+					if on_edge:
+						d = r
+						break
+				edge_dist[Vector2i(x, y)] = d
+
+	for y in range(b.position.y, b.position.y + b.size.y):
+		for x in range(b.position.x, b.position.x + b.size.x):
+			var p := img.get_pixel(x, y)
+			if p.a <= 0.01:
+				continue
+			var lx := x - b.position.x
+			var ly := y - b.position.y
+			var out := Color(tint.r, tint.g, tint.b, p.a)
+			if effect == 0:
+				# Scanlines: darken every other row.
+				var s := 0.55 if (posmod(y, 2) == 0) else 1.0
+				out = Color(tint.r * s, tint.g * s, tint.b * s, p.a)
+			elif effect == 1:
+				# Ordered (Bayer) dither: modulate brightness by threshold pattern.
+				var m :int= bayer[posmod(ly, 4) * 4 + posmod(lx, 4)]
+				var s := 0.45 + 0.55 * m
+				out = Color(tint.r * s, tint.g * s, tint.b * s, p.a)
+			elif effect == 2:
+				# Checker pattern.
+				var s := 1.0 if ((posmod(lx, 2) + posmod(ly, 2)) % 2 == 0) else 0.45
+				out = Color(tint.r * s, tint.g * s, tint.b * s, p.a)
+			elif effect == 3:
+				# Noise grain: deterministic pseudo-random per pixel.
+				var n := fposmod(sin(float(x) * 12.9898 + float(y) * 78.233) * 43758.5453, 1.0)
+				var s := 0.7 + 0.3 * n
+				out = Color(clampf(tint.r * s, 0.0, 1.0), clampf(tint.g * s, 0.0, 1.0), clampf(tint.b * s, 0.0, 1.0), p.a)
+			elif effect == 4:
+				# Edge tint / bevel approximation: lighten near edges, darken interior.
+				var d: int = int(edge_dist.get(Vector2i(x, y), 99))
+				var s := 1.0
+				if d <= 1:
+					s = 1.35
+				elif d == 2:
+					s = 1.1
+				else:
+					s = 0.85
+				# Blend toward tint so "Procedural color" influences the result.
+				var base := Color(tint.r, tint.g, tint.b, p.a)
+				out = Color(clampf(base.r * s, 0.0, 1.0), clampf(base.g * s, 0.0, 1.0), clampf(base.b * s, 0.0, 1.0), p.a)
+			img.set_pixel(x, y, out)
 
 func _pack_rendered_font(font_face: String, font_size: int, rendered: Array, pad: int, filter_mode: int = 0) -> void:
 	var glyphs: Array = []
