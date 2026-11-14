@@ -45,21 +45,22 @@ func _set_glyph_rect(id: int, r: Rect2i) -> void:
 	data.chars[id] = c
 
 func _draw() -> void:
-	draw_rect(Rect2(Vector2.ZERO, size), Color(0.12,0.12,0.14,1.0))
+	draw_rect(Rect2(Vector2.ZERO, size), Color(0.10, 0.12, 0.16, 1.0))
 	if data == null or data.texture == null:
-		draw_string(get_theme_default_font(), Vector2(20,30), "Load a .fnt to start", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(0.7,0.7,0.7))
+		draw_string(get_theme_default_font(), Vector2(20, 30), "Load a .fnt to start", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(0.78, 0.86, 0.96, 0.9))
+		draw_string(get_theme_default_font(), Vector2(20, 54), "Tip: drag files in or use Open / Import buttons above", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.62, 0.72, 0.84, 0.8))
 		return
 	var ts := _tex_size()
 	var dst := Rect2(pan, ts * zoom)
 	# checker
 	var cs := 8.0 * zoom
-	var c1 := Color(0.35,0.35,0.35); var c2 := Color(0.45,0.45,0.45)
+	var c1 := Color(0.28, 0.30, 0.36); var c2 := Color(0.36, 0.39, 0.46)
 	draw_rect(dst, c1)
 	var cols := int(ceil(ts.x / 8.0)); var rows := int(ceil(ts.y / 8.0))
 	for y in rows:
 		for x in cols:
 			if (x + y) % 2 == 0:
-				var r := Rect2(dst.position + Vector2(x,y)*cs, Vector2(cs,cs)).intersection(dst)
+				var r := Rect2(dst.position + Vector2(x, y) * cs, Vector2(cs, cs)).intersection(dst)
 				if r.size.x > 0 and r.size.y > 0:
 					draw_rect(r, c2)
 	draw_texture_rect(data.texture, dst, false)
@@ -69,17 +70,18 @@ func _draw() -> void:
 		if r.size.x <= 0 or r.size.y <= 0:
 			continue
 		var sr := Rect2(dst.position + Vector2(r.position) * zoom, Vector2(r.size) * zoom)
-		var col := Color(0.3,0.7,1.0,0.8)
+		var col := Color(0.35, 0.78, 1.0, 0.85)
 		if id == selected_id:
-			col = Color(1.0,0.45,0.2,1.0)
+			col = Color(1.0, 0.62, 0.28, 1.0)
+			draw_rect(sr, Color(1.0, 0.62, 0.28, 0.12), true)
 		draw_rect(sr, col, false, 1.0)
 	# handles for selected
 	if selected_id != -1 and data.chars.has(selected_id):
 		var r := _glyph_rect(selected_id)
 		var sr := Rect2(dst.position + Vector2(r.position) * zoom, Vector2(r.size) * zoom)
 		for hp in _handle_points(sr):
-			draw_rect(Rect2(hp - Vector2(3,3), Vector2(6,6)), Color.WHITE)
-			draw_rect(Rect2(hp - Vector2(3,3), Vector2(6,6)), Color(1,0.45,0.2), false, 1.0)
+			draw_rect(Rect2(hp - Vector2(3, 3), Vector2(6, 6)), Color(0.98, 0.99, 1.0))
+			draw_rect(Rect2(hp - Vector2(3, 3), Vector2(6, 6)), Color(1.0, 0.62, 0.28), false, 1.0)
 
 func _handle_points(sr: Rect2) -> Array[Vector2]:
 	return [

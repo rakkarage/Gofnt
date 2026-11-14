@@ -1,6 +1,10 @@
 @tool
 extends PanelContainer
 
+const SETTINGS_PATH := "user://settings.cfg"
+const SETTINGS_SECTION := "window"
+const SETTINGS_FULLSCREEN_KEY := "fullscreen"
+
 var data: BMFontData
 var atlas: Control
 var glyph_list: ItemList
@@ -13,6 +17,7 @@ var prop_spin: Dictionary = {}
 var font_line_h: SpinBox
 var font_base: SpinBox
 var glyph_action_btn: Button
+var fullscreen_cb: CheckBox
 var preview_scale: float = 2.0
 var sel_id: int = -1
 var _updating_ui := false
@@ -21,9 +26,11 @@ func _ready() -> void:
 	name = "Gofnt"
 	data = BMFontData.new()
 	_build_ui()
+	_apply_ui_tint()
 	set_process_unhandled_input(true)
 	_apply_project_default_theme()
-	_set_status("Drop-ready: use Open .fnt to load a bitmap font (text BMFont) and its atlas PNG.  F11: fullscreen")
+	_load_window_settings()
+	_set_status("Drop-ready: use Open .fnt to load a bitmap font (text BMFont) and its atlas PNG.  Toggle Fullscreen with F11 or the checkbox.")
 
 func _apply_project_default_theme() -> void:
 	var def_path := str(ProjectSettings.get_setting("gui/theme/custom", "res://themes/venice16_x1.tres"))
@@ -37,13 +44,57 @@ func _apply_project_default_theme() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F11:
-		var win := get_window()
-		if win:
-			if win.mode == Window.MODE_FULLSCREEN:
-				win.mode = Window.MODE_WINDOWED
-			else:
-				win.mode = Window.MODE_FULLSCREEN
+		if fullscreen_cb:
+			fullscreen_cb.button_pressed = not fullscreen_cb.button_pressed
+		else:
+			_set_fullscreen(not _is_fullscreen(), true)
 		accept_event()
+
+func _is_fullscreen() -> bool:
+	var win := get_window()
+	return win != null and win.mode == Window.MODE_FULLSCREEN
+
+func _set_fullscreen(enabled: bool, persist: bool = true) -> void:
+	var win := get_window()
+	if win:
+		win.mode = Window.MODE_FULLSCREEN if enabled else Window.MODE_WINDOWED
+	if persist:
+		_save_window_settings(enabled)
+
+func _load_window_settings() -> void:
+	var cfg := ConfigFile.new()
+	var enabled := false
+	if cfg.load(SETTINGS_PATH) == OK:
+		enabled = bool(cfg.get_value(SETTINGS_SECTION, SETTINGS_FULLSCREEN_KEY, false))
+	if fullscreen_cb:
+		fullscreen_cb.set_pressed_no_signal(enabled)
+	_set_fullscreen(enabled, false)
+
+func _save_window_settings(enabled: bool) -> void:
+	var cfg := ConfigFile.new()
+	cfg.load(SETTINGS_PATH)
+	cfg.set_value(SETTINGS_SECTION, SETTINGS_FULLSCREEN_KEY, enabled)
+	cfg.save(SETTINGS_PATH)
+
+func _apply_ui_tint() -> void:
+	var accent := Color(0.45, 0.72, 1.0)
+	var accent_dim := Color(0.45, 0.72, 1.0, 0.18)
+	var panel := get_theme_stylebox("panel", "PanelContainer")
+	if panel:
+		panel = panel.duplicate()
+		if panel is StyleBoxFlat:
+			var sb := panel as StyleBoxFlat
+			sb.bg_color = sb.bg_color.lerp(Color(0.13, 0.15, 0.19), 0.35)
+			sb.border_width_top = 1
+			sb.border_width_bottom = 1
+			sb.border_width_left = 1
+			sb.border_width_right = 1
+			sb.border_color = accent_dim
+			add_theme_stylebox_override("panel", sb)
+	if status_lbl:
+		status_lbl.add_theme_color_override("font_color", Color(0.78, 0.86, 0.96, 0.92))
+	if stats_lbl:
+		stats_lbl.add_theme_color_override("default_color", Color(0.9, 0.93, 0.98, 0.95))
 
 func _build_ui() -> void:
 	var root := HBoxContainer.new()
@@ -69,24 +120,34 @@ func _build_ui() -> void:
 	var autoslice_btn := Button.new(); autoslice_btn.text = "Trim selected"; autoslice_btn.tooltip_text = "Trim selected glyph rect to non-transparent bounds"; autoslice_btn.pressed.connect(_on_autoslice_selected); bar.add_child(autoslice_btn)
 	var autoslice_all_btn := Button.new(); autoslice_all_btn.text = "Trim all"; autoslice_all_btn.tooltip_text = "Trim all glyph rects to non-transparent bounds (does not detect new glyphs)"; autoslice_all_btn.pressed.connect(_on_autoslice_all); bar.add_child(autoslice_all_btn)
 	var repack_btn := Button.new(); repack_btn.text = "Repack"; repack_btn.tooltip_text = "Shelf-pack glyphs into a tighter power-of-two atlas"; repack_btn.pressed.connect(_on_repack); bar.add_child(repack_btn)
+	bar.add_child(VSeparator.new())
+	fullscreen_cb = CheckBox.new()
+	fullscreen_cb.text = "Fullscreen (F11)"
+	fullscreen_cb.tooltip_text = "Toggle fullscreen window mode (persisted across runs)"
+	fullscreen_cb.toggled.connect(func(pressed: bool): _set_fullscreen(pressed, true))
+	bar.add_child(fullscreen_cb)
 	status_lbl = Label.new(); status_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL; status_lbl.text = ""; status_lbl.clip_text = true; left.add_child(status_lbl)
 
 	var examples_row := HBoxContainer.new(); left.add_child(examples_row)
-	examples_row.add_child(_lbl("Load Demo:"))
+	var load_lbl := _lbl("Load Demo:")
+	load_lbl.add_theme_color_override("font_color", Color(0.72, 0.84, 1.0))
+	examples_row.add_child(load_lbl)
 	var load_dd := OptionButton.new()
 	load_dd.add_item("[load]", 0)
 	load_dd.add_item("Venice16", 1)
 	load_dd.add_item("SuperBlack12", 2)
 	load_dd.add_item("SuperWhite12", 3)
-	load_dd.tooltip_text = "Load an example font"
+	load_dd.tooltip_text = "Load an example bitmap font (.fnt + atlas) from bundled demos"
 	load_dd.item_selected.connect(func(i): _on_load_example(load_dd.get_item_id(i)); load_dd.select(0))
 	examples_row.add_child(load_dd)
 	examples_row.add_child(VSeparator.new())
-	examples_row.add_child(_lbl("Apply Demo:"))
+	var apply_lbl := _lbl("Apply Demo:")
+	apply_lbl.add_theme_color_override("font_color", Color(0.72, 0.84, 1.0))
+	examples_row.add_child(apply_lbl)
 	var apply_dd := OptionButton.new()
 	for item in ["Venice16 @1x (16) (Default)", "Venice16 @2x (32)", "SuperBlack12 @1x (12)", "SuperBlack12 @2x (24)", "SuperWhite12 @1x (12)", "SuperWhite12 @2x (24)"]:
 		apply_dd.add_item(item)
-	apply_dd.tooltip_text = "Apply an example font"
+	apply_dd.tooltip_text = "Apply an example UI theme/font scale to the editor and preview"
 	apply_dd.item_selected.connect(func(i): _on_apply_example(i))
 	examples_row.add_child(apply_dd)
 
@@ -98,7 +159,9 @@ func _build_ui() -> void:
 	atlas.glyph_changed.connect(_on_glyph_changed)
 	left.add_child(atlas)
 
-	var pv_lbl := Label.new(); pv_lbl.text = "Live preview"; left.add_child(pv_lbl)
+	var pv_lbl := Label.new(); pv_lbl.text = "Live preview"
+	pv_lbl.add_theme_color_override("font_color", Color(0.72, 0.84, 1.0))
+	left.add_child(pv_lbl)
 	preview_edit = TextEdit.new()
 	preview_edit.text = "The quick brown fox jumps over the lazy dog.\n0123456789 !?@#$%"
 	preview_edit.custom_minimum_size = Vector2(0, 80)
