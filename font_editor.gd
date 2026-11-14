@@ -246,6 +246,14 @@ func _lbl(t: String) -> Label:
 func _set_status(t: String) -> void:
 	if status_lbl: status_lbl.text = t
 
+func _apply_texture_filter(filter_mode: int) -> void:
+	var tf := CanvasItem.TEXTURE_FILTER_NEAREST if filter_mode == 0 else CanvasItem.TEXTURE_FILTER_LINEAR
+	if preview_canvas:
+		preview_canvas.texture_filter = tf
+	if atlas:
+		atlas.texture_filter = tf
+	# note: BMFont .fnt doesn't store Godot texture filter; this affects editor preview/atlas rendering.
+
 func _on_open() -> void:
 	var dlg := FileDialog.new()
 	dlg.file_mode = FileDialog.FILE_MODE_OPEN_FILE
@@ -266,6 +274,7 @@ func _load_font(path: String) -> void:
 	font_base.value = int(data.common.get("base", 12))
 	_updating_ui = false
 	_refresh_glyph_list(); _refresh_kern(); _refresh_stats()
+	_apply_texture_filter(0)
 	_set_status("Loaded %s  |  %d glyphs" % [data.info.get("face", path.get_file()), data.chars.size()])
 	preview_canvas.queue_redraw(); atlas.queue_redraw()
 
@@ -669,6 +678,7 @@ func _import_image(path: String) -> void:
 		data.common["lineHeight"] = maxi(1, max_h)
 		data.common["base"] = maxi(1, max_h - 2)
 		_set_status("Imported %s: detected %d glyph regions (assigned ids from 32). Review/adjust as needed." % [path.get_file(), data.chars.size()])
+	_apply_texture_filter(0)
 	atlas.set_data(data)
 	_updating_ui = true
 	font_line_h.value = int(data.common.get("lineHeight", 16))
@@ -799,19 +809,41 @@ func _show_ttf_options(font_path: String) -> void:
 	d.add_child(vb)
 	var grid := GridContainer.new(); grid.columns = 2; vb.add_child(grid)
 	grid.add_child(_lbl("Size")); var sz := SpinBox.new(); sz.min_value = 6; sz.max_value = 128; sz.value = 16; sz.step = 1; grid.add_child(sz)
+	grid.add_child(_lbl("Filter")); var filt := OptionButton.new(); filt.add_item("Nearest (pixel)", 0); filt.add_item("Linear (smooth)", 1); filt.selected = 0; grid.add_child(filt)
+	grid.add_child(_lbl("Outline (px)")); var outline_sz := SpinBox.new(); outline_sz.min_value = 0; outline_sz.max_value = 8; outline_sz.value = 0; outline_sz.step = 1; grid.add_child(outline_sz)
+	grid.add_child(_lbl("Outline color")); var outline_col := ColorPickerButton.new(); outline_col.color = Color.BLACK; outline_col.custom_minimum_size = Vector2(120, 0); grid.add_child(outline_col)
+	grid.add_child(_lbl("Gradient")); var grad_dir := OptionButton.new(); grad_dir.add_item("None", 0); grad_dir.add_item("Vertical", 1); grad_dir.add_item("Horizontal", 2); grad_dir.selected = 0; grid.add_child(grad_dir)
+	grid.add_child(_lbl("Gradient top/left")); var grad_c1 := ColorPickerButton.new(); grad_c1.color = Color.WHITE; grad_c1.custom_minimum_size = Vector2(120, 0); grid.add_child(grad_c1)
+	grid.add_child(_lbl("Gradient bottom/right")); var grad_c2 := ColorPickerButton.new(); grad_c2.color = Color(0.7, 0.85, 1.0, 1.0); grad_c2.custom_minimum_size = Vector2(120, 0); grid.add_child(grad_c2)
 	grid.add_child(_lbl("Charset")); var chars := TextEdit.new(); chars.text = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"; chars.custom_minimum_size = Vector2(420, 80); chars.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY; grid.add_child(chars)
-	var info := Label.new(); info.text = "Will rasterize printable glyphs into a new bitmap atlas."; info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; vb.add_child(info)
+	var info := Label.new(); info.text = "Rasterizes glyphs into a new bitmap atlas. Filter affects preview/texture sampling; outline and gradient are baked into the atlas (gradient tints visible glyph pixels)."; info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; vb.add_child(info)
 	add_child(d)
 	d.confirmed.connect(func():
-		var size_v := int(sz.value)
-		var charset_v := chars.text
+		var opts := {
+			"size": int(sz.value),
+			"charset": chars.text,
+			"filter": int(filt.get_selected_id()),
+			"outline": int(outline_sz.value),
+			"outline_color": outline_col.color,
+			"gradient_dir": int(grad_dir.get_selected_id()),
+			"gradient_color1": grad_c1.color,
+			"gradient_color2": grad_c2.color,
+		}
 		d.queue_free()
-		_import_ttf(font_path, size_v, charset_v)
+		_import_ttf(font_path, opts)
 	)
 	d.canceled.connect(func(): d.queue_free())
-	d.popup_centered(Vector2i(560, 260))
+	d.popup_centered(Vector2i(620, 440))
 
-func _import_ttf(font_path: String, font_size: int, charset: String) -> void:
+func _import_ttf(font_path: String, opts: Dictionary) -> void:
+	var font_size: int = int(opts.get("size", 16))
+	var charset: String = str(opts.get("charset", ""))
+	var filter_mode: int = int(opts.get("filter", 0))
+	var outline_px: int = int(opts.get("outline", 0))
+	var outline_color: Color = opts.get("outline_color", Color.BLACK)
+	var gradient_dir: int = int(opts.get("gradient_dir", 0))
+	var gradient_color1: Color = opts.get("gradient_color1", Color.WHITE)
+	var gradient_color2: Color = opts.get("gradient_color2", Color.WHITE)
 	var font := FontFile.new()
 	var err := font.load_dynamic_font(font_path)
 	if err != OK:
@@ -837,9 +869,8 @@ func _import_ttf(font_path: String, font_size: int, charset: String) -> void:
 	for cp in order:
 		var ch := String.chr(cp)
 		var adv := font.get_string_size(ch, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
-		var xadv := int(ceil(adv.x))
+		var xadv := int(ceil(adv.x)) + outline_px * 2
 		if xadv <= 0: xadv = int(font_size / 2.0)
-		# estimate bounds by rendering char alone in a small probe
 		entries.append({"cp": cp, "ch": ch, "xadv": xadv})
 	# render in batches to get images: use one SubViewport and draw each char
 	var vp := SubViewport.new()
@@ -852,12 +883,12 @@ func _import_ttf(font_path: String, font_size: int, charset: String) -> void:
 	vp.add_child(ci)
 	ci.draw.connect(func(): _draw_ttf_probe(ci))
 	var rendered: Array = [] # {cp,xadv,img,ox,oy}
-	var margin := int(font_size)
+	var margin := int(font_size) + outline_px + 2
 	for e in entries:
-		var cw := int(font_size * 2) + margin * 2
-		var chh := int(font_size * 2) + margin * 2
+		var cw := int(font_size * 2) + margin * 2 + outline_px * 4
+		var chh := int(font_size * 2) + margin * 2 + outline_px * 4
 		vp.size = Vector2i(cw, chh)
-		ci.set_meta("ds", {"font": font, "cp": e.cp, "size": font_size, "margin": margin})
+		ci.set_meta("ds", {"font": font, "cp": e.cp, "size": font_size, "margin": margin, "outline": outline_px, "outline_color": outline_color})
 		vp.render_target_update_mode = SubViewport.UPDATE_ONCE
 		ci.queue_redraw()
 		await RenderingServer.frame_post_draw
@@ -874,12 +905,14 @@ func _import_ttf(font_path: String, font_size: int, charset: String) -> void:
 		if b.size.x <= 0 or b.size.y <= 0:
 			rendered.append({"cp": e.cp, "xadv": e.xadv, "w": 0, "h": 0, "img": null, "ox": 0, "oy": 0})
 		else:
+			if gradient_dir != 0:
+				_apply_gradient_to_bounds(img, b, gradient_dir, gradient_color1, gradient_color2)
 			var sub := img.get_region(b)
 			var ox := b.position.x - margin
 			var oy := b.position.y - margin
 			rendered.append({"cp": e.cp, "xadv": e.xadv, "w": b.size.x, "h": b.size.y, "img": sub, "ox": ox, "oy": oy})
 	vp.queue_free()
-	_pack_rendered_font(font_path.get_file().get_basename(), font_size, rendered, pad)
+	_pack_rendered_font(font_path.get_file().get_basename(), font_size, rendered, pad, filter_mode)
 
 func _draw_ttf_probe(ci: Control) -> void:
 	if not ci.has_meta("ds"): return
@@ -888,10 +921,19 @@ func _draw_ttf_probe(ci: Control) -> void:
 	var cp: int = ds.cp
 	var fsize: int = ds.size
 	var margin: int = ds.margin
+	var outline: int = int(ds.get("outline", 0))
+	var outline_color: Color = ds.get("outline_color", Color.BLACK)
 	ci.draw_rect(Rect2(Vector2.ZERO, ci.size), Color(0, 0, 0, 0))
 	# draw baseline at margin+size
 	var baseline := Vector2(margin, margin + fsize)
-	ci.draw_char(font, baseline, String.chr(cp), fsize, Color.WHITE)
+	var ch := String.chr(cp)
+	if outline > 0:
+		for oy in range(-outline, outline + 1):
+			for ox in range(-outline, outline + 1):
+				if ox == 0 and oy == 0: continue
+				if ox * ox + oy * oy > outline * outline: continue
+				ci.draw_char(font, baseline + Vector2(ox, oy), ch, fsize, outline_color)
+	ci.draw_char(font, baseline, ch, fsize, Color.WHITE)
 
 func _alpha_bounds(img: Image) -> Rect2i:
 	var w := img.get_width(); var h := img.get_height()
@@ -907,7 +949,22 @@ func _alpha_bounds(img: Image) -> Rect2i:
 		return Rect2i(0, 0, 0, 0)
 	return Rect2i(minx, miny, maxx - minx + 1, maxy - miny + 1)
 
-func _pack_rendered_font(font_face: String, font_size: int, rendered: Array, pad: int) -> void:
+func _apply_gradient_to_bounds(img: Image, b: Rect2i, dir: int, c1: Color, c2: Color) -> void:
+	if b.size.x <= 0 or b.size.y <= 0: return
+	for y in range(b.position.y, b.position.y + b.size.y):
+		for x in range(b.position.x, b.position.x + b.size.x):
+			var p := img.get_pixel(x, y)
+			if p.a <= 0.01:
+				continue
+			var t := 0.0
+			if dir == 1: # vertical
+				t = 0.0 if b.size.y <= 1 else float(y - b.position.y) / float(b.size.y - 1)
+			elif dir == 2: # horizontal
+				t = 0.0 if b.size.x <= 1 else float(x - b.position.x) / float(b.size.x - 1)
+			var gc: Color = c1.lerp(c2, clampf(t, 0.0, 1.0))
+			img.set_pixel(x, y, Color(gc.r, gc.g, gc.b, p.a))
+
+func _pack_rendered_font(font_face: String, font_size: int, rendered: Array, pad: int, filter_mode: int = 0) -> void:
 	var glyphs: Array = []
 	for r in rendered:
 		if int(r.w) > 0 and int(r.h) > 0:
@@ -956,6 +1013,7 @@ func _pack_rendered_font(font_face: String, font_size: int, rendered: Array, pad
 		if data.chars.has(cp): continue
 		data.chars[cp] = {"id": cp, "x": 0, "y": 0, "width": 0, "height": 0, "xoffset": 0, "yoffset": 0, "xadvance": int(r.xadv), "page": 0, "chnl": 15}
 	data.texture = ImageTexture.create_from_image(img)
+	_apply_texture_filter(filter_mode)
 	atlas.set_data(data)
 	_updating_ui = true
 	font_line_h.value = int(data.common.get("lineHeight", font_size))
@@ -963,7 +1021,8 @@ func _pack_rendered_font(font_face: String, font_size: int, rendered: Array, pad
 	_updating_ui = false
 	_refresh_glyph_list(); _refresh_kern(); _refresh_stats()
 	preview_canvas.queue_redraw(); atlas.queue_redraw()
-	_set_status("Imported TTF/OTF '%s' at size %d: %d glyphs rasterized" % [font_face, font_size, data.chars.size()])
+	var filt_name := "Nearest" if filter_mode == 0 else "Linear"
+	_set_status("Imported TTF/OTF '%s' at size %d: %d glyphs rasterized (%s filter)" % [font_face, font_size, data.chars.size(), filt_name])
 
 func _try_pack_ttf(glyphs: Array, W: int, H: int, pad: int) -> Array:
 	var x := pad; var y := pad; var row_h := 0
