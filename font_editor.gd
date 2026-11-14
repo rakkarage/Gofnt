@@ -1499,21 +1499,29 @@ func _probe_single_font_path(path: String, lines: PackedStringArray) -> bool:
 
 func _probe_image_path(path: String, lines: PackedStringArray) -> bool:
 	var had_error := false
-	var exists := FileAccess.file_exists(path)
-	var bytes := FileAccess.get_file_as_bytes(path)
-	var ferr := -1
-	var f := FileAccess.open(path, FileAccess.READ)
-	if f != null:
-		ferr = OK
-	else:
-		ferr = FileAccess.get_open_error()
-	lines.append("  Image probe: %s | file_exists=%s open_err=%d bytes=%d ResourceLoader.exists=%s" % [path, str(exists), ferr, bytes.size(), str(ResourceLoader.exists(path))])
-	if ResourceLoader.exists(path):
-		var res = ResourceLoader.load(path)
-		lines.append("    ResourceLoader.load type: %s" % (res.get_class() if res != null else "<null>"))
-		if res is Texture2D:
-			var img := (res as Texture2D).get_image()
-			lines.append("    Texture2D.get_image: %s" % ("ok %dx%d" % [img.get_width(), img.get_height()] if img != null else "<null>"))
-	if ferr != OK and bytes.is_empty() and not ResourceLoader.exists(path):
+	var candidates: PackedStringArray = [path, path + ".txt", path + ".bytes", path + ".bin"]
+	if path.get_extension().to_lower() == "png":
+		candidates.append(path.get_basename() + ".png.txt")
+	var any_ok := false
+	for p in candidates:
+		var exists := FileAccess.file_exists(p)
+		var bytes := FileAccess.get_file_as_bytes(p)
+		var ferr := -1
+		var f := FileAccess.open(p, FileAccess.READ)
+		if f != null:
+			ferr = OK
+		else:
+			ferr = FileAccess.get_open_error()
+		var rex := ResourceLoader.exists(p)
+		if ferr == OK or bytes.size() > 0 or rex:
+			any_ok = true
+		lines.append("  Image probe: %s | file_exists=%s open_err=%d bytes=%d ResourceLoader.exists=%s" % [p, str(exists), ferr, bytes.size(), str(rex)])
+		if rex:
+			var res = ResourceLoader.load(p)
+			lines.append("    ResourceLoader.load type: %s" % (res.get_class() if res != null else "<null>"))
+			if res is Texture2D:
+				var img := (res as Texture2D).get_image()
+				lines.append("    Texture2D.get_image: %s" % ("ok %dx%d" % [img.get_width(), img.get_height()] if img != null else "<null>"))
+	if not any_ok:
 		had_error = true
 	return had_error

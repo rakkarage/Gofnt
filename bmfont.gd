@@ -139,43 +139,72 @@ func _load_image_compat(path: String) -> Image:
 		return null
 	if path.begins_with("res://"):
 		# Web/packed exports: prefer ResourceLoader for imported textures/resources.
-		var res = null
-		if ResourceLoader.exists(path):
-			res = ResourceLoader.load(path)
-		if res == null:
-			# Some exports/load paths may still resolve without exists() reporting true.
-			res = load(path)
-		if res is Texture2D:
-			var tex_img := (res as Texture2D).get_image()
-			if tex_img != null:
-				return tex_img.duplicate()
-		elif res is Image:
-			return (res as Image).duplicate()
-		var bytes := FileAccess.get_file_as_bytes(path)
-		if not bytes.is_empty():
+		var candidates: PackedStringArray = [path]
+		# Workarounds for export filters/packaging quirks: allow atlas bytes under alternate names.
+		for suffix in [".txt", ".bytes", ".png", ".bin"]:
+			var alt := path + suffix
+			if not candidates.has(alt):
+				candidates.append(alt)
+		if path.get_extension().to_lower() == "png":
+			var noext := path.get_basename()
+			for alt in [noext + ".png.txt", noext + ".bin", noext + ".bytes"]:
+				if not candidates.has(alt):
+					candidates.append(alt)
+		for p in candidates:
+			var res = null
+			if ResourceLoader.exists(p):
+				res = ResourceLoader.load(p)
+			if res == null:
+				res = load(p)
+			if res is Texture2D:
+				var tex_img := (res as Texture2D).get_image()
+				if tex_img != null:
+					return tex_img.duplicate()
+			elif res is Image:
+				return (res as Image).duplicate()
+		for p in candidates:
+			var bytes := FileAccess.get_file_as_bytes(p)
+			if bytes.is_empty():
+				continue
+			var lower := p.to_lower()
+			# try formats based on candidate and original path
+			var fmts: PackedStringArray = []
+			if lower.ends_with(".png") or path.to_lower().ends_with(".png"):
+				fmts.append("png")
+			if lower.ends_with(".webp") or path.to_lower().ends_with(".webp"):
+				fmts.append("webp")
+			if lower.ends_with(".jpg") or lower.ends_with(".jpeg") or path.to_lower().ends_with(".jpg") or path.to_lower().ends_with(".jpeg"):
+				fmts.append("jpg")
+			if lower.ends_with(".bmp") or path.to_lower().ends_with(".bmp"):
+				fmts.append("bmp")
+			if fmts.is_empty():
+				fmts = PackedStringArray(["png", "webp", "jpg", "bmp"])
 			var img := Image.new()
-			var lower := path.to_lower()
-			var err := ERR_FILE_UNRECOGNIZED
-			if lower.ends_with(".png"):
-				err = img.load_png_from_buffer(bytes)
-			elif lower.ends_with(".webp"):
-				err = img.load_webp_from_buffer(bytes)
-			elif lower.ends_with(".jpg") or lower.ends_with(".jpeg"):
-				err = img.load_jpg_from_buffer(bytes)
-			elif lower.ends_with(".bmp"):
-				err = img.load_bmp_from_buffer(bytes)
-			else:
-				err = img.load_png_from_buffer(bytes)
-				if err != OK:
-					err = img.load_webp_from_buffer(bytes)
-				if err != OK:
-					err = img.load_jpg_from_buffer(bytes)
-			if err == OK:
-				return img
+			for fmt in fmts:
+				var err := ERR_FILE_UNRECOGNIZED
+				match fmt:
+					"png": err = img.load_png_from_buffer(bytes)
+					"webp": err = img.load_webp_from_buffer(bytes)
+					"jpg": err = img.load_jpg_from_buffer(bytes)
+					"bmp": err = img.load_bmp_from_buffer(bytes)
+				if err == OK:
+					return img
+			# last-chance generic attempts
+			for try_fmt in ["png", "webp", "jpg", "bmp"]:
+				var e2 := ERR_FILE_UNRECOGNIZED
+				match try_fmt:
+					"png": e2 = img.load_png_from_buffer(bytes)
+					"webp": e2 = img.load_webp_from_buffer(bytes)
+					"jpg": e2 = img.load_jpg_from_buffer(bytes)
+					"bmp": e2 = img.load_bmp_from_buffer(bytes)
+				if e2 == OK:
+					return img
 		# Fallback for editor/desktop cases.
 		var abs_path := ProjectSettings.globalize_path(path)
 		if abs_path != "":
-			return Image.load_from_file(abs_path)
+			var fimg := Image.load_from_file(abs_path)
+			if fimg != null:
+				return fimg
 		return null
 	var img := Image.load_from_file(path)
 	if img == null and not path.is_absolute_path():
