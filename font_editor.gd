@@ -1469,32 +1469,31 @@ func _probe_single_font_path(path: String, lines: PackedStringArray) -> bool:
 	# Try BMFontData.load_fnt simulation
 	var probe := BMFontData.new()
 	var err := probe.load_fnt(path)
-	lines.append("  BMFontData.load_fnt -> err=%d (%s) | fnt_path=%s image_path=%s chars=%d" % [err, error_string(err) if err == OK or err != OK else str(err), probe.fnt_path, probe.image_path, probe.chars.size()])
+	var err_name := error_string(err)
+	lines.append("  BMFontData.load_fnt -> err=" + str(err) + " (" + err_name + ") | fnt_path=" + str(probe.fnt_path) + " | image_path=" + str(probe.image_path) + " | chars=" + str(probe.chars.size()))
 	if err != OK:
 		had_error = true
-		# Even on failure, inspect page/image hints when available.
-		if not probe.pages.is_empty():
-			lines.append("  Parsed pages: %s" % str(probe.pages))
-		if probe.image_path != "":
-			had_error = _probe_image_path(probe.image_path, lines) or had_error
-		else:
-			var pf := ""
-			if not probe.pages.is_empty():
-				pf = str(probe.pages[0].get("file", ""))
-			if pf != "":
-				var guess := path.get_base_dir().path_join(pf)
-				lines.append("  Guessed page image: %s" % guess)
-				had_error = _probe_image_path(guess, lines) or had_error
+	if not probe.pages.is_empty():
+		lines.append("  Parsed pages: " + str(probe.pages))
+	var probe_img_path := str(probe.image_path)
+	if probe_img_path == "" and not probe.pages.is_empty():
+		var pf := str(probe.pages[0].get("file", ""))
+		if pf != "":
+			probe_img_path = str(probe.fnt_path).get_base_dir().path_join(pf) if str(probe.fnt_path) != "" else path.get_base_dir().path_join(pf)
+			lines.append("  Guessed page image: " + probe_img_path)
+	if probe_img_path != "":
+		had_error = _probe_image_path(probe_img_path, lines) or had_error
 	else:
-		lines.append("  Parsed: face=%s pages=%s scale=%sx%s" % [str(probe.info.get("face", "")), str(probe.pages), str(probe.common.get("scaleW", "")), str(probe.common.get("scaleH", ""))])
-		if probe.image_path != "":
-			had_error = _probe_image_path(probe.image_path, lines) or had_error
+		lines.append("  Image probe: <no page image path resolved>")
+		had_error = true
+	if err == OK:
+		lines.append("  Parsed: face=" + str(probe.info.get("face", "")) + " pages=" + str(probe.pages) + " scale=" + str(probe.common.get("scaleW", "")) + "x" + str(probe.common.get("scaleH", "")))
 		if probe.texture == null or probe.image == null:
 			lines.append("  [!] Parsed but texture/image missing")
 			had_error = true
 	# raw bytes hint
 	var bytes := FileAccess.get_file_as_bytes(path)
-	lines.append("  get_file_as_bytes size=%d" % bytes.size())
+	lines.append("  get_file_as_bytes size=" + str(bytes.size()))
 	return had_error
 
 func _probe_image_path(path: String, lines: PackedStringArray) -> bool:
