@@ -11,6 +11,7 @@ config_version=5
 [application]
 
 config/name="Gofnt"
+config/tags=PackedStringArray("2d", "font", "pixel", "tool")
 run/main_scene="res://font_editor.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 config/icon="res://icon.svg"
@@ -18,10 +19,6 @@ config/icon="res://icon.svg"
 [gui]
 
 theme/custom="res://theme/venice16_x1.tres"
-
-[physics]
-
-3d/physics_engine="Jolt Physics"
 
 [rendering]
 
