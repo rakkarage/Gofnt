@@ -126,7 +126,7 @@ func _build_ui() -> void:
 
 func _build_glyph_tab() -> Control:
 	var vb := VBoxContainer.new()
-	var hl := Label.new(); hl.text = "Glyphs (ASCII 32–126 shown; missing can be created)"; vb.add_child(hl)
+	var hl := Label.new(); hl.text = "Glyphs (ASCII 32-126 shown; missing can be created)"; vb.add_child(hl)
 	glyph_list = ItemList.new(); glyph_list.size_flags_vertical = Control.SIZE_EXPAND_FILL; glyph_list.custom_minimum_size = Vector2(0, 180)
 	glyph_list.item_selected.connect(_on_list_selected)
 	vb.add_child(glyph_list)
@@ -735,7 +735,7 @@ func _show_ttf_options(font_path: String) -> void:
 	d.add_child(vb)
 	var grid := GridContainer.new(); grid.columns = 2; vb.add_child(grid)
 	grid.add_child(_lbl("Size")); var sz := SpinBox.new(); sz.min_value = 6; sz.max_value = 128; sz.value = 16; sz.step = 1; grid.add_child(sz)
-	grid.add_child(_lbl("Charset")); var chars := LineEdit.new(); chars.text = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"; chars.custom_minimum_size = Vector2(420, 0); grid.add_child(chars)
+	grid.add_child(_lbl("Charset")); var chars := TextEdit.new(); chars.text = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"; chars.custom_minimum_size = Vector2(420, 80); chars.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY; grid.add_child(chars)
 	var info := Label.new(); info.text = "Will rasterize printable glyphs into a new bitmap atlas."; info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; vb.add_child(info)
 	add_child(d)
 	d.confirmed.connect(func():
@@ -745,7 +745,7 @@ func _show_ttf_options(font_path: String) -> void:
 		_import_ttf(font_path, size_v, charset_v)
 	)
 	d.canceled.connect(func(): d.queue_free())
-	d.popup_centered(Vector2i(560, 180))
+	d.popup_centered(Vector2i(560, 260))
 
 func _import_ttf(font_path: String, font_size: int, charset: String) -> void:
 	var font := FontFile.new()
