@@ -241,8 +241,7 @@ func _build_ui() -> void:
 	examples_row.add_child(load_demo_lbl)
 	var load_dd := OptionButton.new()
 	load_dd.add_item("Select", 0)
-	load_dd.add_item("SuperBlack12", 2)
-	load_dd.add_item("SuperWhite12", 3)
+	load_dd.add_item("Super12", 2)
 	load_dd.add_item("Venice16", 1)
 	load_dd.tooltip_text = "Load an example bitmap font (.fnt + atlas) from bundled demos"
 	load_dd.item_selected.connect(func(i): _on_load_example(load_dd.get_item_id(i)); load_dd.select(0))
@@ -254,10 +253,8 @@ func _build_ui() -> void:
 	apply_dd = OptionButton.new()
 	for item in [
 		["None", 0],
-		["SuperBlack12 @1x (12)", 3],
-		["SuperBlack12 @2x (24)", 4],
-		["SuperWhite12 @1x (12)", 5],
-		["SuperWhite12 @2x (24)", 6],
+		["Super12 @1x (12)", 3],
+		["Super12 @2x (24)", 4],
 		["Venice16 @1x (16)", 1],
 		["Venice16 @2x (32)", 2],
 	]:
@@ -358,9 +355,6 @@ func _build_kern_tab() -> Control:
 
 func _lbl(t: String) -> Label:
 	var l := Label.new(); l.text = t; return l
-
-func _set_status(t: String) -> void:
-	if status_lbl: status_lbl.text = t
 
 func _apply_texture_filter(filter_mode: int) -> void:
 	var tf := CanvasItem.TEXTURE_FILTER_NEAREST if filter_mode == 0 else CanvasItem.TEXTURE_FILTER_LINEAR
@@ -848,8 +842,7 @@ func _detect_glyph_rects(img: Image) -> Array[Rect2i]:
 func _example_paths() -> Dictionary:
 	return {
 		1: "res://fnt/Venice16.fnt",
-		2: "res://fnt/SuperBlack12.fnt",
-		3: "res://fnt/SuperWhite12.fnt",
+		2: "res://fnt/Super12.fnt",
 	}
 
 func _on_load_example(id: int) -> void:
@@ -870,14 +863,12 @@ func _on_load_example(id: int) -> void:
 			_load_font(abs_path + ".txt")
 
 func _on_apply_example(idx: int) -> void:
-	# 0 none, 1 V@1,2 V@2,3 B@1,4 B@2,5 W@1,6 W@2
+	# 0 none, 1 V@1,2 V@2,3 B@1,4 B@2
 	var theme_map := {
 		1: "res://theme/venice16_x1.tres",
 		2: "res://theme/venice16_x2.tres",
-		3: "res://theme/superblack12_x1.tres",
-		4: "res://theme/superblack12_x2.tres",
-		5: "res://theme/superwhite12_x1.tres",
-		6: "res://theme/superwhite12_x2.tres",
+		3: "res://theme/super12_x1.tres",
+		4: "res://theme/super12_x2.tres",
 	}
 	if idx == 0 or not theme_map.has(idx):
 		# None: use an empty theme so the editor shows Godot's default UI (not the project custom theme)
@@ -904,10 +895,8 @@ func _on_apply_example(idx: int) -> void:
 		var sz := 16
 		match idx:
 			2: fpath = "res://fnt/Venice16.fnt"; sz = 32
-			3: fpath = "res://fnt/SuperBlack12.fnt"; sz = 12
-			4: fpath = "res://fnt/SuperBlack12.fnt"; sz = 24
-			5: fpath = "res://fnt/SuperWhite12.fnt"; sz = 12
-			6: fpath = "res://fnt/SuperWhite12.fnt"; sz = 24
+			3: fpath = "res://fnt/Super12.fnt"; sz = 12
+			4: fpath = "res://fnt/Super12.fnt"; sz = 24
 		if ResourceLoader.exists(fpath):
 			t.default_font = load(fpath)
 		t.default_font_size = sz
