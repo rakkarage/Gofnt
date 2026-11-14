@@ -128,6 +128,10 @@ func _load_page_image() -> Error:
 	if image == null:
 		image = _load_image_compat(fnt_path.get_base_dir().path_join(file))
 	if image == null:
+		# Last resort for web/packed exports: extract the atlas image from the
+		# imported FontFile resource (which is always available when .fnt is).
+		image = _load_image_from_fontfile(fnt_path)
+	if image == null:
 		return ERR_FILE_CANT_OPEN
 	texture = ImageTexture.create_from_image(image)
 	common["scaleW"] = image.get_width()
@@ -141,13 +145,13 @@ func _load_image_compat(path: String) -> Image:
 		# Web/packed exports: prefer ResourceLoader for imported textures/resources.
 		var candidates: PackedStringArray = [path]
 		# Workarounds for export filters/packaging quirks: allow atlas bytes under alternate names.
-		for suffix in [".txt", ".bytes", ".png", ".bin"]:
-			var alt := path + suffix
+		for suffix: String in [".txt", ".bytes", ".png", ".bin"]:
+			var alt: String = path + suffix
 			if not candidates.has(alt):
 				candidates.append(alt)
 		if path.get_extension().to_lower() == "png":
 			var noext := path.get_basename()
-			for alt in [noext + ".png.txt", noext + ".bin", noext + ".bytes"]:
+			for alt: String in [noext + ".png.txt", noext + ".bin", noext + ".bytes"]:
 				if not candidates.has(alt):
 					candidates.append(alt)
 		for p in candidates:
@@ -210,6 +214,36 @@ func _load_image_compat(path: String) -> Image:
 	if img == null and not path.is_absolute_path():
 		img = Image.load_from_file(ProjectSettings.globalize_path(path))
 	return img
+
+func _load_image_from_fontfile(fnt_path: String) -> Image:
+	if fnt_path.is_empty():
+		return null
+	var candidates: PackedStringArray = []
+	if fnt_path.ends_with(".txt"):
+		candidates.append(fnt_path.substr(0, fnt_path.length() - 4))
+	else:
+		candidates.append(fnt_path)
+	# Also try a .fnt sibling in case fnt_path points at a raw text copy.
+	var base := fnt_path.get_basename()
+	if not base.ends_with(".fnt"):
+		candidates.append(base + ".fnt")
+	for cp in candidates:
+		if cp.is_empty():
+			continue
+		if not ResourceLoader.exists(cp):
+			continue
+		var res = ResourceLoader.load(cp)
+		if res is FontFile:
+			var ff := res as FontFile
+			for sz in [0, 8, 12, 16, 24, 32]:
+				var cnt := ff.get_texture_count(0, Vector2i(sz, 0))
+				if cnt <= 0:
+					continue
+				for ti in range(cnt):
+					var img := ff.get_texture_image(0, Vector2i(sz, 0), ti)
+					if img != null:
+						return img.duplicate()
+	return null
 
 func sorted_char_ids() -> Array:
 	var ids := chars.keys()
