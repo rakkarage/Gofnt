@@ -12,6 +12,8 @@ var kern_list: ItemList
 var prop_spin: Dictionary = {}
 var font_line_h: SpinBox
 var font_base: SpinBox
+var glyph_action_btn: Button
+var preview_scale: float = 2.0
 var sel_id: int = -1
 var _updating_ui := false
 
@@ -44,16 +46,37 @@ func _build_ui() -> void:
 	left.size_flags_stretch_ratio = 3.0
 	root.add_child(left)
 
-	var bar := HBoxContainer.new()
+	var bar := HFlowContainer.new()
+	bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	left.add_child(bar)
-	var open_btn := Button.new(); open_btn.text = "Open .fnt"; open_btn.pressed.connect(_on_open); bar.add_child(open_btn)
-	var save_fnt_btn := Button.new(); save_fnt_btn.text = "Save .fnt"; save_fnt_btn.pressed.connect(_on_save_fnt); bar.add_child(save_fnt_btn)
-	var save_png_btn := Button.new(); save_png_btn.text = "Save PNG"; save_png_btn.pressed.connect(_on_save_png); bar.add_child(save_png_btn)
+	var open_btn := Button.new(); open_btn.text = "Open .fnt"; open_btn.tooltip_text = "Load a BMFont .fnt (text/XML) and its atlas PNG"; open_btn.pressed.connect(_on_open); bar.add_child(open_btn)
+	var open_img_btn := Button.new(); open_img_btn.text = "Import Image"; open_img_btn.tooltip_text = "Import a PNG and auto-detect glyph regions (creates a new font)"; open_img_btn.pressed.connect(_on_import_image); bar.add_child(open_img_btn)
+	var save_fnt_btn := Button.new(); save_fnt_btn.text = "Save .fnt"; save_fnt_btn.tooltip_text = "Save BMFont data to the loaded .fnt path"; save_fnt_btn.pressed.connect(_on_save_fnt); bar.add_child(save_fnt_btn)
+	var save_png_btn := Button.new(); save_png_btn.text = "Save PNG"; save_png_btn.tooltip_text = "Save atlas image to the loaded PNG path"; save_png_btn.pressed.connect(_on_save_png); bar.add_child(save_png_btn)
 	bar.add_child(VSeparator.new())
-	var autoslice_btn := Button.new(); autoslice_btn.text = "Auto-slice selected"; autoslice_btn.pressed.connect(_on_autoslice_selected); bar.add_child(autoslice_btn)
-	var autoslice_all_btn := Button.new(); autoslice_all_btn.text = "Auto-slice all"; autoslice_all_btn.pressed.connect(_on_autoslice_all); bar.add_child(autoslice_all_btn)
-	var repack_btn := Button.new(); repack_btn.text = "Repack atlas"; repack_btn.pressed.connect(_on_repack); bar.add_child(repack_btn)
-	status_lbl = Label.new(); status_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL; status_lbl.text = ""; status_lbl.clip_text = true; bar.add_child(status_lbl)
+	var autoslice_btn := Button.new(); autoslice_btn.text = "Trim selected"; autoslice_btn.tooltip_text = "Trim selected glyph rect to non-transparent bounds"; autoslice_btn.pressed.connect(_on_autoslice_selected); bar.add_child(autoslice_btn)
+	var autoslice_all_btn := Button.new(); autoslice_all_btn.text = "Trim all"; autoslice_all_btn.tooltip_text = "Trim all glyph rects to non-transparent bounds (does not detect new glyphs)"; autoslice_all_btn.pressed.connect(_on_autoslice_all); bar.add_child(autoslice_all_btn)
+	var repack_btn := Button.new(); repack_btn.text = "Repack"; repack_btn.tooltip_text = "Shelf-pack glyphs into a tighter power-of-two atlas"; repack_btn.pressed.connect(_on_repack); bar.add_child(repack_btn)
+	status_lbl = Label.new(); status_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL; status_lbl.text = ""; status_lbl.clip_text = true; left.add_child(status_lbl)
+
+	var examples_row := HBoxContainer.new(); left.add_child(examples_row)
+	examples_row.add_child(_lbl("Load Demo:"))
+	var load_dd := OptionButton.new()
+	load_dd.add_item("[load]", 0)
+	load_dd.add_item("Venice16", 1)
+	load_dd.add_item("SuperBlack12", 2)
+	load_dd.add_item("SuperWhite12", 3)
+	load_dd.tooltip_text = "Load an included example .fnt into the editor"
+	load_dd.item_selected.connect(func(i): _on_load_example(load_dd.get_item_id(i)); load_dd.select(0))
+	examples_row.add_child(load_dd)
+	examples_row.add_child(VSeparator.new())
+	examples_row.add_child(_lbl("Apply Demo:"))
+	var apply_dd := OptionButton.new()
+	for item in ["[apply]", "Venice16 @1x (16)", "Venice16 @2x (32)", "SuperBlack12 @1x (12)", "SuperBlack12 @2x (24)", "SuperWhite12 @1x (12)", "SuperWhite12 @2x (24)"]:
+		apply_dd.add_item(item)
+	apply_dd.tooltip_text = "Apply an included font to the preview/theme UI at 1x or 2x scale"
+	apply_dd.item_selected.connect(func(i): _on_apply_example(i))
+	examples_row.add_child(apply_dd)
 
 	atlas = FontAtlasView.new()
 	atlas.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -67,7 +90,7 @@ func _build_ui() -> void:
 	preview_edit = TextEdit.new()
 	preview_edit.text = "The quick brown fox jumps over the lazy dog.\n0123456789 !?@#$%"
 	preview_edit.custom_minimum_size = Vector2(0, 80)
-	preview_edit.scroll_fit_content_height = true
+	preview_edit.scroll_fit_content_height = false
 	preview_edit.text_changed.connect(func(): preview_canvas.queue_redraw())
 	left.add_child(preview_edit)
 	preview_canvas = Control.new()
@@ -92,10 +115,19 @@ func _build_ui() -> void:
 
 func _build_glyph_tab() -> Control:
 	var vb := VBoxContainer.new()
-	var hl := Label.new(); hl.text = "Glyphs (click atlas or list)"; vb.add_child(hl)
+	var hl := Label.new(); hl.text = "Glyphs (ASCII 32–126 shown; missing can be created)"; vb.add_child(hl)
 	glyph_list = ItemList.new(); glyph_list.size_flags_vertical = Control.SIZE_EXPAND_FILL; glyph_list.custom_minimum_size = Vector2(0, 180)
 	glyph_list.item_selected.connect(_on_list_selected)
 	vb.add_child(glyph_list)
+	var add_row := HBoxContainer.new(); vb.add_child(add_row)
+	var add_edit := LineEdit.new(); add_edit.placeholder_text = "char or id (e.g. A or 65)"; add_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL; add_row.add_child(add_edit)
+	var add_btn := Button.new(); add_btn.text = "Add / Go"; add_btn.tooltip_text = "Create (if missing) and select glyph for the given character or numeric id"; add_row.add_child(add_btn)
+	add_btn.pressed.connect(func(): _add_or_select_glyph(add_edit.text))
+	add_edit.text_submitted.connect(func(_t): _add_or_select_glyph(add_edit.text))
+	glyph_action_btn = Button.new(); glyph_action_btn.text = "Create glyph"; glyph_action_btn.disabled = true
+	glyph_action_btn.tooltip_text = "Create or delete the selected glyph entry"
+	glyph_action_btn.pressed.connect(_on_glyph_action)
+	vb.add_child(glyph_action_btn)
 	var grid := GridContainer.new(); grid.columns = 2; vb.add_child(grid)
 	for key in ["x", "y", "width", "height", "xoffset", "yoffset", "xadvance"]:
 		var l := Label.new(); l.text = key; grid.add_child(l)
@@ -104,7 +136,7 @@ func _build_glyph_tab() -> Control:
 		s.value_changed.connect(func(v): _on_prop_changed(key, int(v)))
 		grid.add_child(s)
 		prop_spin[key] = s
-	var hint := Label.new(); hint.text = "Tip: drag in atlas to move, drag corners/edges to resize. Mouse wheel zooms, middle-drag pans."; hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var hint := Label.new(); hint.text = "Tip: select a (missing) entry to create it (gets a default rect). Set x/y/width/height in properties or drag/resize it in the atlas. Mouse wheel zooms, middle-drag pans."; hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	vb.add_child(hint)
 	return vb
 
@@ -164,12 +196,38 @@ func _load_font(path: String) -> void:
 
 func _refresh_glyph_list() -> void:
 	glyph_list.clear()
-	if data == null: return
+	if data == null or data.image == null: return
+	var ids := {}
+	for id in data.chars.keys():
+		ids[int(id)] = true
+	var shown: Array[int] = []
+	for id in range(32, 127):
+		shown.append(id)
 	for id in data.sorted_char_ids():
+		var iid := int(id)
+		if iid < 32 or iid > 126:
+			shown.append(iid)
+	shown.sort()
+	for id in shown:
+		var has := ids.has(id)
 		var ch := "space" if id == 32 else String.chr(id)
-		var c: Dictionary = data.chars[id]
-		var idx := glyph_list.add_item("%s  (%d)  adv:%s" % [ch, id, str(c.get("xadvance", 0))])
-		glyph_list.set_item_metadata(idx, id)
+		if has:
+			var c: Dictionary = data.chars[id]
+			var w := int(c.get("width", 0)); var h := int(c.get("height", 0))
+			var label := "%s  (%d)  adv:%s" % [ch, id, str(c.get("xadvance", 0))]
+			if w <= 0 or h <= 0:
+				label += "  (empty)"
+			var idx := glyph_list.add_item(label)
+			glyph_list.set_item_metadata(idx, id)
+			if w > 0 and h > 0:
+				glyph_list.set_item_custom_fg_color(idx, Color(0.8, 1.0, 0.85, 0.95)) # used/defined
+			else:
+				glyph_list.set_item_custom_fg_color(idx, Color(1.0, 0.9, 0.6, 0.9)) # created but no rect
+		else:
+			var idx := glyph_list.add_item("%s  (%d)  (missing)" % [ch, id])
+			glyph_list.set_item_metadata(idx, id)
+			glyph_list.set_item_custom_fg_color(idx, Color(1, 1, 1, 0.4))
+	_update_glyph_action()
 
 func _refresh_kern() -> void:
 	kern_list.clear()
@@ -188,6 +246,8 @@ func _refresh_stats() -> void:
 	]
 
 func _on_glyph_selected(id: int) -> void:
+	if id != -1:
+		_ensure_glyph(id)
 	sel_id = id
 	_sync_props()
 	# select in list
@@ -196,19 +256,84 @@ func _on_glyph_selected(id: int) -> void:
 			glyph_list.select(i); glyph_list.ensure_current_is_visible(); break
 
 func _on_list_selected(idx: int) -> void:
-	sel_id = int(glyph_list.get_item_metadata(idx))
+	var id := int(glyph_list.get_item_metadata(idx))
+	if data != null and data.image != null and not data.chars.has(id):
+		_ensure_glyph(id)
+		_refresh_glyph_list()
+		for i in glyph_list.item_count:
+			if int(glyph_list.get_item_metadata(i)) == id:
+				glyph_list.select(i); glyph_list.ensure_current_is_visible(); break
+		_set_status("Created glyph %d (%s) — set its rect in the atlas/properties" % [id, ("space" if id == 32 else String.chr(id))])
+	sel_id = id
 	atlas.selected_id = sel_id
 	atlas.queue_redraw()
 	_sync_props()
 
+func _ensure_glyph(id: int) -> void:
+	if data == null or data.chars.has(id): return
+	var lh := maxi(1, int(data.common.get("lineHeight", 16)))
+	# default to a visible, draggable rect so it can be placed/resized in the atlas immediately
+	data.chars[id] = {"id": id, "x": 0, "y": 0, "width": lh, "height": lh, "xoffset": 0, "yoffset": 0, "xadvance": int(lh * 0.6), "page": 0, "chnl": 15}
+
+func _add_or_select_glyph(text: String) -> void:
+	if data == null or data.image == null:
+		_set_status("Load or import a font/image first"); return
+	var t := text.strip_edges()
+	if t.is_empty(): return
+	var id := -1
+	if t.is_valid_int():
+		id = int(t)
+	elif t.length() >= 1:
+		id = t.unicode_at(0)
+	if id < 0: return
+	var created := not data.chars.has(id)
+	_ensure_glyph(id)
+	if created:
+		_refresh_glyph_list(); _refresh_stats()
+	for i in glyph_list.item_count:
+		if int(glyph_list.get_item_metadata(i)) == id:
+			glyph_list.select(i); _on_list_selected(i); glyph_list.ensure_current_is_visible(); return
+	# id outside shown range, add to list view by refreshing
+	_refresh_glyph_list()
+	for i in glyph_list.item_count:
+		if int(glyph_list.get_item_metadata(i)) == id:
+			glyph_list.select(i); _on_list_selected(i); return
+
 func _sync_props() -> void:
 	_updating_ui = true
-	var has := sel_id != -1 and data.chars.has(sel_id)
+	var has := data != null and sel_id != -1 and data.chars.has(sel_id)
 	for k in prop_spin.keys():
 		var s: SpinBox = prop_spin[k]
 		s.editable = has
 		s.value = int(data.chars[sel_id].get(k, 0)) if has else 0
 	_updating_ui = false
+	_update_glyph_action()
+
+func _update_glyph_action() -> void:
+	if glyph_action_btn == null: return
+	if data == null or data.image == null or sel_id < 0:
+		glyph_action_btn.disabled = true; glyph_action_btn.text = "Create glyph"; return
+	glyph_action_btn.disabled = false
+	if data.chars.has(sel_id):
+		glyph_action_btn.text = "Delete glyph %d" % sel_id
+	else:
+		glyph_action_btn.text = "Create glyph %d" % sel_id
+
+func _on_glyph_action() -> void:
+	if data == null or data.image == null or sel_id < 0: return
+	if data.chars.has(sel_id):
+		data.chars.erase(sel_id)
+		atlas.selected_id = -1
+		_set_status("Deleted glyph %d" % sel_id)
+	else:
+		_ensure_glyph(sel_id)
+		_set_status("Created glyph %d" % sel_id)
+	_refresh_glyph_list(); _refresh_stats(); atlas.queue_redraw(); preview_canvas.queue_redraw()
+	_sync_props()
+	# reselect same id in list
+	for i in glyph_list.item_count:
+		if int(glyph_list.get_item_metadata(i)) == sel_id:
+			glyph_list.select(i); break
 
 func _on_prop_changed(key: String, val: int) -> void:
 	if _updating_ui or sel_id == -1 or not data.chars.has(sel_id): return
@@ -231,7 +356,7 @@ func _draw_preview() -> void:
 	if data == null or data.texture == null: return
 	var txt := preview_edit.text
 	var lh := int(data.common.get("lineHeight", 16))
-	var s := 2.0
+	var s := preview_scale
 	var margin := Vector2(8, 8)
 	var kern := {}
 	for k in data.kernings:
@@ -382,3 +507,147 @@ func _remove_kern() -> void:
 	var meta = kern_list.get_item_metadata(sel[0])
 	data.kernings.erase(meta)
 	_refresh_kern(); preview_canvas.queue_redraw(); _refresh_stats(); _set_status("Removed kerning pair")
+
+func _on_import_image() -> void:
+	var dlg := FileDialog.new()
+	dlg.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+	dlg.access = FileDialog.ACCESS_FILESYSTEM
+	dlg.filters = PackedStringArray(["*.png ; PNG Image"])
+	add_child(dlg)
+	dlg.file_selected.connect(func(p): _import_image(p); dlg.queue_free())
+	dlg.canceled.connect(func(): dlg.queue_free())
+	dlg.popup_centered_ratio(0.7)
+
+func _import_image(path: String) -> void:
+	var img := Image.load_from_file(path)
+	if img == null:
+		_set_status("Failed to load image: %s" % path); return
+	data.clear()
+	data.image = img
+	data.texture = ImageTexture.create_from_image(img)
+	data.image_path = path
+	data.fnt_path = path.get_basename() + ".fnt"
+	data.info = {"face": path.get_file().get_basename(), "size": 16}
+	data.common = {"lineHeight": 16, "base": 12, "scaleW": img.get_width(), "scaleH": img.get_height(), "pages": 1}
+	data.pages = [ {"id": 0, "file": path.get_file()}]
+	var rects := _detect_glyph_rects(img)
+	# sort by top-left reading order
+	rects.sort_custom(func(a, b): return (a.position.y / 16) < (b.position.y / 16) or ((a.position.y / 16) == (b.position.y / 16) and a.position.x < b.position.x))
+	var id := 32
+	for r in rects:
+		data.chars[id] = {"id": id, "x": r.position.x, "y": r.position.y, "width": r.size.x, "height": r.size.y, "xoffset": 0, "yoffset": 0, "xadvance": r.size.x + 1, "page": 0, "chnl": 15}
+		id += 1
+	if data.chars.is_empty():
+		# fallback single glyph covering image bounds? no, just report
+		_set_status("Imported image but detected no glyph blobs (check alpha).");
+	else:
+		# heuristic lineHeight/base
+		var max_h := 0
+		for cid in data.chars.keys(): max_h = maxi(max_h, int(data.chars[cid].height))
+		data.common["lineHeight"] = maxi(1, max_h)
+		data.common["base"] = maxi(1, max_h - 2)
+		_set_status("Imported %s: detected %d glyph regions (assigned ids from 32). Review/adjust as needed." % [path.get_file(), data.chars.size()])
+	atlas.set_data(data)
+	_updating_ui = true
+	font_line_h.value = int(data.common.get("lineHeight", 16))
+	font_base.value = int(data.common.get("base", 12))
+	_updating_ui = false
+	_refresh_glyph_list(); _refresh_kern(); _refresh_stats()
+	preview_canvas.queue_redraw(); atlas.queue_redraw()
+
+func _detect_glyph_rects(img: Image) -> Array[Rect2i]:
+	var w := img.get_width(); var h := img.get_height()
+	var visited := PackedByteArray(); visited.resize(w * h)
+	var rects: Array[Rect2i] = []
+	for y in h:
+		for x in w:
+			var idx := y * w + x
+			if visited[idx]: continue
+			if img.get_pixel(x, y).a <= 0.05:
+				visited[idx] = 1; continue
+			# BFS blob
+			var q: Array[Vector2i] = [Vector2i(x, y)]
+			visited[idx] = 1
+			var head := 0
+			var minx := x; var miny := y; var maxx := x; var maxy := y
+			while head < q.size():
+				var p: Vector2i = q[head]; head += 1
+				for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+					var nx: int = p.x + d.x; var ny: int = p.y + d.y
+					if nx < 0 or ny < 0 or nx >= w or ny >= h: continue
+					var nidx := ny * w + nx
+					if visited[nidx]: continue
+					if img.get_pixel(nx, ny).a <= 0.05:
+						visited[nidx] = 1; continue
+					visited[nidx] = 1
+					q.append(Vector2i(nx, ny))
+					minx = mini(minx, nx); miny = mini(miny, ny); maxx = maxi(maxx, nx); maxy = maxi(maxy, ny)
+			rects.append(Rect2i(minx, miny, maxx - minx + 1, maxy - miny + 1))
+	return rects
+
+func _example_paths() -> Dictionary:
+	return {
+		1: "res://font/Venice16.fnt",
+		2: "res://font/SuperBlack12.fnt",
+		3: "res://font/SuperWhite12.fnt",
+	}
+
+func _on_load_example(id: int) -> void:
+	if id <= 0: return
+	var path: String = _example_paths().get(id, "")
+	if path == "": return
+	var abs_path := ProjectSettings.globalize_path(path)
+	var try_path := abs_path if FileAccess.file_exists(abs_path) else path
+	_load_font(try_path)
+	if data == null or data.image == null:
+		# fallback: try the other form
+		var alt := path if try_path == abs_path else abs_path
+		_load_font(alt)
+
+func _on_apply_example(idx: int) -> void:
+	# 0 none, 1 V@1,2 V@2,3 B@1,4 B@2,5 W@1,6 W@2
+	var theme_map := {
+		1: "res://themes/venice16_x1.tres",
+		2: "res://themes/venice16_x2.tres",
+		3: "res://themes/superblack12_x1.tres",
+		4: "res://themes/superblack12_x2.tres",
+		5: "res://themes/superwhite12_x1.tres",
+		6: "res://themes/superwhite12_x2.tres",
+	}
+	if idx == 0 or not theme_map.has(idx):
+		theme = null
+		preview_scale = 2.0
+		if preview_edit:
+			preview_edit.remove_theme_font_override("font")
+			preview_edit.remove_theme_font_size_override("font_size")
+		preview_canvas.queue_redraw()
+		_set_status("Theme/demo cleared")
+		return
+	var tpath: String = theme_map[idx]
+	var t: Theme = null
+	if ResourceLoader.exists(tpath):
+		t = load(tpath)
+	if t:
+		theme = t
+	else:
+		# fallback: build at runtime
+		t = Theme.new()
+		var fpath := "res://font/Venice16.fnt"
+		var sz := 16
+		match idx:
+			2: fpath = "res://font/Venice16.fnt"; sz = 32
+			3: fpath = "res://font/SuperBlack12.fnt"; sz = 12
+			4: fpath = "res://font/SuperBlack12.fnt"; sz = 24
+			5: fpath = "res://font/SuperWhite12.fnt"; sz = 12
+			6: fpath = "res://font/SuperWhite12.fnt"; sz = 24
+		if ResourceLoader.exists(fpath):
+			t.default_font = load(fpath)
+		t.default_font_size = sz
+		theme = t
+	if preview_edit:
+		preview_edit.remove_theme_font_override("font")
+		preview_edit.remove_theme_font_size_override("font_size")
+	# keep canvas preview scale in sync with selection (1x for odd, 2x for even >0)
+	preview_scale = 2.0 if idx % 2 == 0 else 1.0
+	preview_canvas.queue_redraw()
+	_set_status("Applied theme to root: %s (live, no reload needed)" % tpath.get_file())

@@ -1,3 +1,6 @@
 [gd_resource type="Theme" format=3 uid="uid://d1p6t5shgr1sv"]
 
+[ext_resource type="FontFile" uid="uid://bafxu0ve0uy3c" path="res://font/Venice16.fnt" id="1_yd3fu"]
+
 [resource]
+default_font = ExtResource("1_yd3fu")

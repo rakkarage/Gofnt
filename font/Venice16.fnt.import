@@ -1,0 +1,17 @@
+[remap]
+
+importer="font_data_bmfont"
+type="FontFile"
+uid="uid://bafxu0ve0uy3c"
+path="res://.godot/imported/Venice16.fnt-fd5124358a5aace24eb64619a15bce7c.fontdata"
+
+[deps]
+
+source_file="res://font/Venice16.fnt"
+dest_files=["res://.godot/imported/Venice16.fnt-fd5124358a5aace24eb64619a15bce7c.fontdata"]
+
+[params]
+
+fallbacks=[]
+compress=true
+scaling_mode=1

@@ -1,8 +1,8 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://dq7ganp23k30e"]
 
-[ext_resource type="Script" path="res://font_editor.gd" id="1"]
+[ext_resource type="Script" uid="uid://ci23ybeyqwbpu" path="res://font_editor.gd" id="1"]
 
-[node name="FontEditor" type="PanelContainer"]
+[node name="JuicyFontEditor" type="PanelContainer" unique_id=484314587]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
