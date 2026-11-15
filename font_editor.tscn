@@ -51,7 +51,7 @@ text = "Open..."
 [node name="SaveFntBtn" type="Button" parent="Main/Left/Toolbar" unique_id=2133824506]
 layout_mode = 2
 tooltip_text = "Save both .fnt and atlas PNG (PNG name derived from .fnt when needed)"
-text = "Save"
+text = "Save..."
 
 [node name="VSep1" type="VSeparator" parent="Main/Left/Toolbar" unique_id=1355346282]
 layout_mode = 2
@@ -59,7 +59,7 @@ layout_mode = 2
 [node name="TrimSelectedBtn" type="Button" parent="Main/Left/Toolbar" unique_id=1687167368]
 layout_mode = 2
 tooltip_text = "Trim selected glyph rect to non-transparent bounds"
-text = "Trim selected"
+text = "Trim"
 
 [node name="TrimAllBtn" type="Button" parent="Main/Left/Toolbar" unique_id=1513690821]
 layout_mode = 2

@@ -65,6 +65,7 @@ func _set_section(kind: String, attrs: Dictionary) -> void:
 		"char":
 			var id := int(attrs.get("id", -1))
 			if id >= 0:
+				attrs.erase("letter")
 				chars[id] = attrs
 		"kerning": kernings.append(attrs)
 
@@ -258,24 +259,40 @@ func to_fnt_text() -> String:
 		out.append(_fmt_line("page", p, ["file"]))
 	var ids := sorted_char_ids()
 	out.append("chars count=%d" % ids.size())
+	# Compute per-field widths so char rows line up in columns.
+	var char_widths: Dictionary = {}
+	var letter_width := 0
+	for id in ids:
+		var c: Dictionary = chars[id]
+		for k in c.keys():
+			var token := "%s=%s" % [k, str(c[k])]
+			var L := token.length()
+			if not char_widths.has(k) or L > int(char_widths[k]):
+				char_widths[k] = L
+		# (letter width not padded; keeps trailing whitespace out of the file)
 	for id in ids:
 		var c: Dictionary = chars[id]
 		var letter := "space" if id == 32 else String.chr(id)
-		out.append(_fmt_line("char", c, []) + " letter=\"" + letter + "\"")
+		var ltoken := "letter=\"%s\"" % letter
+		out.append(_fmt_line("char", c, [], char_widths) + " " + ltoken)
 	if not kernings.is_empty():
 		out.append("kernings count=%d" % kernings.size())
 		for k in kernings:
 			out.append(_fmt_line("kerning", k, []))
 	return "\n".join(out) + "\n"
 
-func _fmt_line(kind: String, d: Dictionary, quoted: Array) -> String:
+func _fmt_line(kind: String, d: Dictionary, quoted: Array, widths: Dictionary = {}) -> String:
 	var parts := PackedStringArray([kind])
 	for k in d.keys():
 		var v = d[k]
+		var token: String
 		if k in quoted or (k == "file" and kind == "page"):
-			parts.append("%s=\"%s\"" % [k, str(v)])
+			token = "%s=\"%s\"" % [k, str(v)]
 		else:
-			parts.append("%s=%s" % [k, str(v)])
+			token = "%s=%s" % [k, str(v)]
+		if widths.has(k):
+			token = token.rpad(int(widths[k]))
+		parts.append(token)
 	return " ".join(parts)
 
 func save_fnt(path: String) -> Error:
