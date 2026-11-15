@@ -7,6 +7,8 @@ const SETTINGS_FULLSCREEN_KEY := "fullscreen"
 const SETTINGS_TTF_SECTION := "ttf_import"
 const SETTINGS_UI_SECTION := "ui"
 const SETTINGS_APPLY_DEMO_KEY := "apply_demo"
+const SETTINGS_FILEDIALOG_SECTION := "file_dialog"
+const SETTINGS_FILEDIALOG_FAVORITES_KEY := "favorites"
 
 var data: BMFontData
 var atlas: Control
@@ -42,6 +44,7 @@ func _ready() -> void:
 	_apply_project_default_theme()
 	_load_window_settings()
 	_load_apply_settings()
+	_load_file_dialog_favorites()
 	_set_status("Drop-ready: use Open .fnt to load a bitmap font (text BMFont) and its atlas PNG.  Toggle Fullscreen with F11 or the checkbox.")
 
 func _apply_project_default_theme() -> void:
@@ -51,6 +54,9 @@ func _apply_project_default_theme() -> void:
 	elif ResourceLoader.exists("res://theme/venice16_x1.tres"):
 		theme = load("res://theme/venice16_x1.tres")
 	_refresh_preview()
+
+func _exit_tree() -> void:
+	_save_file_dialog_favorites()
 
 func _unhandled_input(event: InputEvent) -> void:
 	# Never toggle window mode from within the Godot editor (tool mode): it would
@@ -106,6 +112,42 @@ func _save_window_settings(enabled: bool) -> void:
 	cfg.load(SETTINGS_PATH)
 	cfg.set_value(SETTINGS_SECTION, SETTINGS_FULLSCREEN_KEY, enabled)
 	cfg.save(SETTINGS_PATH)
+
+func _load_file_dialog_favorites() -> void:
+	if Engine.is_editor_hint():
+		return
+	var cfg := ConfigFile.new()
+	if cfg.load(SETTINGS_PATH) != OK:
+		return
+	var raw = cfg.get_value(SETTINGS_FILEDIALOG_SECTION, SETTINGS_FILEDIALOG_FAVORITES_KEY, PackedStringArray())
+	var favs := PackedStringArray()
+	if raw is PackedStringArray:
+		favs = raw
+	elif raw is Array:
+		for v in raw:
+			favs.append(str(v))
+	FileDialog.set_favorite_list(favs)
+
+func _save_file_dialog_favorites() -> void:
+	if Engine.is_editor_hint():
+		return
+	var cfg := ConfigFile.new()
+	cfg.load(SETTINGS_PATH)
+	cfg.set_value(SETTINGS_FILEDIALOG_SECTION, SETTINGS_FILEDIALOG_FAVORITES_KEY, FileDialog.get_favorite_list())
+	cfg.save(SETTINGS_PATH)
+
+func _register_file_dialog(dlg: FileDialog) -> void:
+	# Persist favorites (which are only kept in memory by the engine) across runs.
+	dlg.file_selected.connect(func(_p): _save_file_dialog_favorites())
+	dlg.canceled.connect(func(): _save_file_dialog_favorites())
+	var _was_open := [false]
+	dlg.visibility_changed.connect(func():
+		if dlg.visible:
+			_was_open[0] = true
+		elif _was_open[0]:
+			_was_open[0] = false
+			_save_file_dialog_favorites()
+	)
 
 func _default_ttf_import_settings() -> Dictionary:
 	return {
@@ -456,6 +498,7 @@ func _on_open() -> void:
 	dlg.access = FileDialog.ACCESS_FILESYSTEM
 	dlg.filters = PackedStringArray(["*.fnt ; BMFont"])
 	add_child(dlg)
+	_register_file_dialog(dlg)
 	dlg.file_selected.connect(func(p): _load_font(p); dlg.queue_free())
 	dlg.canceled.connect(func(): dlg.queue_free())
 	dlg.popup_centered_ratio(0.7)
@@ -653,6 +696,7 @@ func _on_save_fnt() -> void:
 		dlg.filters = PackedStringArray(["*.fnt ; BMFont"])
 		dlg.current_file = (str(data.info.get("face", "font")) + ".fnt")
 		add_child(dlg)
+		_register_file_dialog(dlg)
 		dlg.file_selected.connect(func(p):
 			data.fnt_path = p
 			if data.image_path == "":
@@ -682,6 +726,7 @@ func _on_save_png() -> void:
 		dlg.filters = PackedStringArray(["*.png ; PNG Image"])
 		dlg.current_file = base.get_file() + ".png"
 		add_child(dlg)
+		_register_file_dialog(dlg)
 		dlg.file_selected.connect(func(p):
 			data.image_path = p
 			_do_save_png()
@@ -835,6 +880,7 @@ func _on_import_image() -> void:
 	dlg.access = FileDialog.ACCESS_FILESYSTEM
 	dlg.filters = PackedStringArray(["*.png ; PNG Image"])
 	add_child(dlg)
+	_register_file_dialog(dlg)
 	dlg.file_selected.connect(func(p): _import_image(p); dlg.queue_free())
 	dlg.canceled.connect(func(): dlg.queue_free())
 	dlg.popup_centered_ratio(0.7)
@@ -1029,6 +1075,7 @@ func _on_import_ttf() -> void:
 	dlg.access = FileDialog.ACCESS_FILESYSTEM
 	dlg.filters = PackedStringArray(["*.ttf,*.otf ; Font"])
 	add_child(dlg)
+	_register_file_dialog(dlg)
 	dlg.file_selected.connect(func(p): dlg.queue_free(); _show_ttf_options(p))
 	dlg.canceled.connect(func(): dlg.queue_free())
 	dlg.popup_centered_ratio(0.7)
@@ -1072,6 +1119,7 @@ func _show_ttf_options(font_path: String) -> void:
 
 	var stamp_fd := FileDialog.new(); stamp_fd.file_mode = FileDialog.FILE_MODE_OPEN_FILE; stamp_fd.access = FileDialog.ACCESS_FILESYSTEM; stamp_fd.filters = PackedStringArray(["*.png,*.jpg,*.jpeg,*.webp,*.bmp ; Image files"]); stamp_fd.title = "Choose Stamp Image"
 	stamp_fd.file_selected.connect(func(path): stamp_path.text = path)
+	_register_file_dialog(stamp_fd)
 	d.add_child(stamp_fd)
 	stamp_browse.pressed.connect(func(): stamp_fd.popup_centered(Vector2i(700, 500)))
 
