@@ -213,8 +213,7 @@ func _save_ttf_import_settings(opts: Dictionary) -> void:
 	cfg.save(SETTINGS_PATH)
 
 func _apply_ui_tint() -> void:
-	var accent := Color(0.45, 0.72, 1.0)
-	var accent_dim := Color(0.45, 0.72, 1.0, 0.18)
+	var accent := Color(0.45, 0.72, 1.0, 0.18)
 	var panel := get_theme_stylebox("panel", "PanelContainer")
 	if panel:
 		panel = panel.duplicate()
@@ -225,7 +224,7 @@ func _apply_ui_tint() -> void:
 			sb.border_width_bottom = 1
 			sb.border_width_left = 1
 			sb.border_width_right = 1
-			sb.border_color = accent_dim
+			sb.border_color = accent
 			add_theme_stylebox_override("panel", sb)
 	_ui_tinted = true
 	if status_lbl:

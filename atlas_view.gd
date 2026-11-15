@@ -71,7 +71,7 @@ func reset_view() -> void:
 func _tween_pan(target: Vector2) -> void:
 	_kill_pan_tween()
 	_pan_tween = create_tween()
-	_pan_tween.tween_property(self, "pan", target, 0.3).set_trans(Tween.TRANS_SPRING).set_ease(Tween.EASE_OUT)
+	_pan_tween.tween_method(func(v: Vector2): pan = v; queue_redraw(), pan, target, 0.3).set_trans(Tween.TRANS_SPRING).set_ease(Tween.EASE_OUT)
 
 func _constrain_pan() -> void:
 	if data == null or data.texture == null:
@@ -85,15 +85,21 @@ func _constrain_pan() -> void:
 	if view_rect.intersects(map_rect):
 		return
 	var delta := Vector2.ZERO
-	if view_rect.position.x > map_rect.position.x:
-		delta.x += map_rect.position.x - view_rect.position.x
-	if view_rect.end.x < map_rect.end.x:
-		delta.x -= view_rect.end.x - map_rect.end.x
-	if view_rect.position.y > map_rect.position.y:
-		delta.y += map_rect.position.y - view_rect.position.y
-	if view_rect.end.y < map_rect.end.y:
-		delta.y -= view_rect.end.y - map_rect.end.y
-	_tween_pan(pan + delta * zoom)
+	if view_rect.end.x < map_rect.position.x:
+		# View is entirely left of map (atlas off to the right): bring atlas fully
+		# back by aligning its right edge to the view's right edge.
+		delta.x = map_rect.end.x - view_rect.end.x
+	elif view_rect.position.x > map_rect.end.x:
+		# View is entirely right of map (atlas off to the left): bring atlas fully
+		# back by aligning its left edge to the view's left edge.
+		delta.x = map_rect.position.x - view_rect.position.x
+	if view_rect.end.y < map_rect.position.y:
+		# View is entirely above map (atlas off below): align atlas bottom to view bottom.
+		delta.y = map_rect.end.y - view_rect.end.y
+	elif view_rect.position.y > map_rect.end.y:
+		# View is entirely below map (atlas off above): align atlas top to view top.
+		delta.y = map_rect.position.y - view_rect.position.y
+	_tween_pan(pan - delta * zoom)
 
 func _tex_size() -> Vector2:
 	if data and data.texture:
@@ -208,7 +214,8 @@ func _gui_input(event: InputEvent) -> void:
 		if mb.button_index == MOUSE_BUTTON_MIDDLE:
 			if mb.pressed:
 				_kill_pan_tween()
-				dragging = true; drag_mode = "pan"; drag_start_mouse = mb.position; drag_start_rect = Rect2i(Vector2i(pan), Vector2i.ZERO); accept_event(); return
+				dragging = true; drag_mode = "pan"; drag_start_mouse = mb.position; drag_start_rect = Rect2i(Vector2i(pan), Vector2i.ZERO)
+				accept_event(); return
 			else:
 				dragging = false; drag_mode = ""
 				_constrain_pan()
