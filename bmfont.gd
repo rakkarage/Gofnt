@@ -184,26 +184,26 @@ func _load_image_compat(path: String) -> Image:
 				fmts.append("bmp")
 			if fmts.is_empty():
 				fmts = PackedStringArray(["png", "webp", "jpg", "bmp"])
-			var img := Image.new()
+			var img_tmp := Image.new()
 			for fmt in fmts:
 				var err := ERR_FILE_UNRECOGNIZED
 				match fmt:
-					"png": err = img.load_png_from_buffer(bytes)
-					"webp": err = img.load_webp_from_buffer(bytes)
-					"jpg": err = img.load_jpg_from_buffer(bytes)
-					"bmp": err = img.load_bmp_from_buffer(bytes)
+					"png": err = img_tmp.load_png_from_buffer(bytes)
+					"webp": err = img_tmp.load_webp_from_buffer(bytes)
+					"jpg": err = img_tmp.load_jpg_from_buffer(bytes)
+					"bmp": err = img_tmp.load_bmp_from_buffer(bytes)
 				if err == OK:
-					return img
+					return img_tmp
 			# last-chance generic attempts
 			for try_fmt in ["png", "webp", "jpg", "bmp"]:
 				var e2 := ERR_FILE_UNRECOGNIZED
 				match try_fmt:
-					"png": e2 = img.load_png_from_buffer(bytes)
-					"webp": e2 = img.load_webp_from_buffer(bytes)
-					"jpg": e2 = img.load_jpg_from_buffer(bytes)
-					"bmp": e2 = img.load_bmp_from_buffer(bytes)
+					"png": e2 = img_tmp.load_png_from_buffer(bytes)
+					"webp": e2 = img_tmp.load_webp_from_buffer(bytes)
+					"jpg": e2 = img_tmp.load_jpg_from_buffer(bytes)
+					"bmp": e2 = img_tmp.load_bmp_from_buffer(bytes)
 				if e2 == OK:
-					return img
+					return img_tmp
 		# Fallback for editor/desktop cases.
 		var abs_path := ProjectSettings.globalize_path(path)
 		if abs_path != "":
@@ -216,16 +216,16 @@ func _load_image_compat(path: String) -> Image:
 		img = Image.load_from_file(ProjectSettings.globalize_path(path))
 	return img
 
-func _load_image_from_fontfile(fnt_path: String) -> Image:
-	if fnt_path.is_empty():
+func _load_image_from_fontfile(path: String) -> Image:
+	if path.is_empty():
 		return null
 	var candidates: PackedStringArray = []
-	if fnt_path.ends_with(".txt"):
-		candidates.append(fnt_path.substr(0, fnt_path.length() - 4))
+	if path.ends_with(".txt"):
+		candidates.append(path.substr(0, path.length() - 4))
 	else:
-		candidates.append(fnt_path)
+		candidates.append(path)
 	# Also try a .fnt sibling in case fnt_path points at a raw text copy.
-	var base := fnt_path.get_basename()
+	var base := path.get_basename()
 	if not base.ends_with(".fnt"):
 		candidates.append(base + ".fnt")
 	for cp in candidates:
@@ -261,7 +261,6 @@ func to_fnt_text() -> String:
 	out.append("chars count=%d" % ids.size())
 	# Compute per-field widths so char rows line up in columns.
 	var char_widths: Dictionary = {}
-	var letter_width := 0
 	for id in ids:
 		var c: Dictionary = chars[id]
 		for k in c.keys():
