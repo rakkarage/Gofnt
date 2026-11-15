@@ -414,13 +414,29 @@ func _apply_texture_filter(filter_mode: int) -> void:
 	# note: BMFont .fnt doesn't store Godot texture filter; this affects editor preview/atlas rendering.
 
 func _on_open() -> void:
+	# Unified "Open" dialog: accepts BMFont .fnt, TTF/OTF fonts, and images.
+	# The selected file is routed to the appropriate loader based on its extension.
 	var dlg := FileDialog.new()
 	dlg.file_mode = FileDialog.FILE_MODE_OPEN_FILE
 	dlg.access = FileDialog.ACCESS_FILESYSTEM
-	dlg.filters = PackedStringArray(["*.fnt ; BMFont"])
+	dlg.filters = PackedStringArray([
+		"*.fnt ; BMFont (.fnt)",
+		"*.ttf,*.otf ; TrueType/OpenType Font (.ttf/.otf)",
+		"*.png,*.webp,*.jpg,*.jpeg,*.bmp ; Image (.png/.webp/...)",
+	])
 	add_child(dlg)
 	_register_file_dialog(dlg)
-	dlg.file_selected.connect(func(p): _load_font(p); dlg.queue_free())
+	dlg.file_selected.connect(func(p: String):
+		var ext := p.get_extension().to_lower()
+		match ext:
+			"fnt":
+				_load_font(p)
+			"ttf", "otf":
+				_show_ttf_options(p)
+			_:
+				_import_image(p)
+		dlg.queue_free()
+	)
 	dlg.canceled.connect(func(): dlg.queue_free())
 	dlg.popup_centered_ratio(0.7)
 
@@ -613,24 +629,41 @@ func _on_save_fnt() -> void:
 	if data == null or data.image == null:
 		_set_status("Nothing to save"); return
 	if data.fnt_path == "":
-		var dlg := FileDialog.new()
-		dlg.file_mode = FileDialog.FILE_MODE_SAVE_FILE
-		dlg.access = FileDialog.ACCESS_FILESYSTEM
-		dlg.filters = PackedStringArray(["*.fnt ; BMFont"])
-		dlg.current_file = (str(data.info.get("face", "font")) + ".fnt")
-		add_child(dlg)
-		_register_file_dialog(dlg)
-		dlg.file_selected.connect(func(p):
+		_prompt_save_unified()
+		return
+	_do_save_fnt()
+
+func _prompt_save_unified() -> void:
+	if data == null or data.image == null:
+		_set_status("Nothing to save"); return
+	var dlg := FileDialog.new()
+	dlg.file_mode = FileDialog.FILE_MODE_SAVE_FILE
+	dlg.access = FileDialog.ACCESS_FILESYSTEM
+	dlg.filters = PackedStringArray([
+		"*.fnt ; BMFont (.fnt)",
+		"*.png ; PNG Image (.png)",
+	])
+	var base := data.fnt_path.get_basename() if data.fnt_path != "" else str(data.info.get("face", "font"))
+	dlg.current_file = base.get_file()
+	add_child(dlg)
+	_register_file_dialog(dlg)
+	dlg.file_selected.connect(func(p: String):
+		var ext := p.get_extension().to_lower()
+		if ext == "fnt":
 			data.fnt_path = p
 			if data.image_path == "":
 				data.image_path = p.get_basename() + ".png"
 			_do_save_fnt()
-			dlg.queue_free()
-		)
-		dlg.canceled.connect(func(): dlg.queue_free())
-		dlg.popup_centered_ratio(0.7)
-		return
-	_do_save_fnt()
+		else:
+			var out := p
+			if not out.to_lower().ends_with(".png"):
+				out += ".png"
+			data.image_path = out
+			_do_save_png()
+		dlg.queue_free()
+	)
+	dlg.canceled.connect(func(): dlg.queue_free())
+	dlg.popup_centered_ratio(0.7)
 
 func _do_save_fnt() -> void:
 	var err := data.save_fnt(data.fnt_path)
@@ -642,21 +675,7 @@ func _on_save_png() -> void:
 	if data == null or data.image == null:
 		_set_status("Nothing to save"); return
 	if data.image_path == "":
-		var base := data.fnt_path.get_basename() if data.fnt_path != "" else str(data.info.get("face", "font"))
-		var dlg := FileDialog.new()
-		dlg.file_mode = FileDialog.FILE_MODE_SAVE_FILE
-		dlg.access = FileDialog.ACCESS_FILESYSTEM
-		dlg.filters = PackedStringArray(["*.png ; PNG Image"])
-		dlg.current_file = base.get_file() + ".png"
-		add_child(dlg)
-		_register_file_dialog(dlg)
-		dlg.file_selected.connect(func(p):
-			data.image_path = p
-			_do_save_png()
-			dlg.queue_free()
-		)
-		dlg.canceled.connect(func(): dlg.queue_free())
-		dlg.popup_centered_ratio(0.7)
+		_prompt_save_unified()
 		return
 	_do_save_png()
 
@@ -798,20 +817,37 @@ func _remove_kern() -> void:
 	_refresh_kern(); _refresh_preview(); _refresh_stats(); _set_status("Removed kerning pair")
 
 func _on_import_image() -> void:
-	var dlg := FileDialog.new()
-	dlg.file_mode = FileDialog.FILE_MODE_OPEN_FILE
-	dlg.access = FileDialog.ACCESS_FILESYSTEM
-	dlg.filters = PackedStringArray(["*.png ; PNG Image"])
-	add_child(dlg)
-	_register_file_dialog(dlg)
-	dlg.file_selected.connect(func(p): _import_image(p); dlg.queue_free())
-	dlg.canceled.connect(func(): dlg.queue_free())
-	dlg.popup_centered_ratio(0.7)
+	# Unified open dialog (accepts images and other supported formats).
+	_on_open()
 
 func _import_image(path: String) -> void:
 	var img := Image.load_from_file(path)
 	if img == null:
-		_set_status("Failed to load image: %s" % path, true); return
+		# Fallback for formats load_from_file may not handle directly (e.g. webp in some builds).
+		var bytes := FileAccess.get_file_as_bytes(path)
+		if not bytes.is_empty():
+			img = Image.new()
+			var ext := path.get_extension().to_lower()
+			var ok := false
+			match ext:
+				"png": ok = img.load_png_from_buffer(bytes) == OK
+				"webp": ok = img.load_webp_from_buffer(bytes) == OK
+				"jpg", "jpeg": ok = img.load_jpg_from_buffer(bytes) == OK
+				"bmp": ok = img.load_bmp_from_buffer(bytes) == OK
+			if not ok:
+				# Last-chance: try all common formats.
+				for fmt in ["png", "webp", "jpg", "bmp"]:
+					var e := ERR_FILE_UNRECOGNIZED
+					match fmt:
+						"png": e = img.load_png_from_buffer(bytes)
+						"webp": e = img.load_webp_from_buffer(bytes)
+						"jpg": e = img.load_jpg_from_buffer(bytes)
+						"bmp": e = img.load_bmp_from_buffer(bytes)
+					if e == OK:
+						ok = true
+						break
+		if img == null or (img.get_width() <= 0 and img.get_height() <= 0):
+			_set_status("Failed to load image: %s" % path, true); return
 	data.clear()
 	data.image = img
 	data.texture = ImageTexture.create_from_image(img)
@@ -961,15 +997,8 @@ func _save_apply_settings(idx: int) -> void:
 	cfg.save(SETTINGS_PATH)
 
 func _on_import_ttf() -> void:
-	var dlg := FileDialog.new()
-	dlg.file_mode = FileDialog.FILE_MODE_OPEN_FILE
-	dlg.access = FileDialog.ACCESS_FILESYSTEM
-	dlg.filters = PackedStringArray(["*.ttf,*.otf ; Font"])
-	add_child(dlg)
-	_register_file_dialog(dlg)
-	dlg.file_selected.connect(func(p): dlg.queue_free(); _show_ttf_options(p))
-	dlg.canceled.connect(func(): dlg.queue_free())
-	dlg.popup_centered_ratio(0.7)
+	# Unified open dialog (accepts TTF/OTF and other supported formats).
+	_on_open()
 
 func _show_ttf_options(font_path: String) -> void:
 	_ttf_font_path = font_path
