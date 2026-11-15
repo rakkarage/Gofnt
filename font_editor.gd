@@ -1219,7 +1219,7 @@ func _import_ttf(font_path: String, opts: Dictionary) -> void:
 	var ci := Control.new()
 	ci.set_anchors_preset(Control.PRESET_FULL_RECT)
 	vp.add_child(ci)
-	ci.draw.connect(func(): _draw_ttf_probe(ci))
+	ci.draw.connect(func(): _ttf_draw_glyph(ci))
 	var rendered: Array = [] # {cp,xadv,img,ox,oy}
 	var margin := int(font_size) + outline_px + 2
 	var total := entries.size()
@@ -1228,36 +1228,47 @@ func _import_ttf(font_path: String, opts: Dictionary) -> void:
 		var cw := int(font_size * 2) + margin * 2 + outline_px * 4
 		var chh := int(font_size * 2) + margin * 2 + outline_px * 4
 		vp.size = Vector2i(cw, chh)
-		ci.set_meta("ds", {"font": font, "cp": e.cp, "size": font_size, "margin": margin, "outline": outline_px, "outline_color": outline_color})
-		vp.render_target_update_mode = SubViewport.UPDATE_ONCE
-		ci.queue_redraw()
-		await RenderingServer.frame_post_draw
-		await RenderingServer.frame_post_draw
+		var img: Image = null
+		if outline_px > 0 and fill_mode in [1, 2]:
+			# Render fill and outline separately so effects don't overwrite outline color.
+			img = await _render_ttf_glyph_layered(vp, ci, font, int(e.cp), font_size, margin, outline_px, outline_color, fill_mode, gradient_dir, gradient_color1, gradient_color2, proc_effect, proc_color)
+		else:
+			ci.set_meta("ds", {"font": font, "cp": e.cp, "size": font_size, "margin": margin, "outline": outline_px, "outline_color": outline_color})
+			vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+			ci.queue_redraw()
+			await RenderingServer.frame_post_draw
+			await RenderingServer.frame_post_draw
+			if not is_inside_tree():
+				if is_instance_valid(vp):
+					vp.queue_free()
+				_generating_font = false
+				return
+			var tex := vp.get_texture()
+			if tex != null:
+				img = tex.get_image()
+			if img != null:
+				var b := _alpha_bounds(img)
+				if b.size.x > 0 and b.size.y > 0:
+					if fill_mode == 1:
+						_apply_gradient_to_bounds(img, b, gradient_dir, gradient_color1, gradient_color2)
+					elif fill_mode == 2:
+						_apply_procedural_to_bounds(img, b, proc_effect, proc_color)
 		if not is_inside_tree():
 			if is_instance_valid(vp):
 				vp.queue_free()
 			_generating_font = false
 			return
-		var tex := vp.get_texture()
-		if tex == null:
+		if img == null:
 			rendered.append({"cp": e.cp, "xadv": e.xadv, "w": 0, "h": 0, "img": null, "ox": 0, "oy": 0})
 		else:
-			var img := tex.get_image()
-			if img == null:
+			var b := _alpha_bounds(img)
+			if b.size.x <= 0 or b.size.y <= 0:
 				rendered.append({"cp": e.cp, "xadv": e.xadv, "w": 0, "h": 0, "img": null, "ox": 0, "oy": 0})
 			else:
-				var b := _alpha_bounds(img)
-				if b.size.x <= 0 or b.size.y <= 0:
-					rendered.append({"cp": e.cp, "xadv": e.xadv, "w": 0, "h": 0, "img": null, "ox": 0, "oy": 0})
-				else:
-					if fill_mode == 1:
-						_apply_gradient_to_bounds(img, b, gradient_dir, gradient_color1, gradient_color2)
-					elif fill_mode == 2:
-						_apply_procedural_to_bounds(img, b, proc_effect, proc_color)
-					var sub := img.get_region(b)
-					var ox := b.position.x - margin
-					var oy := b.position.y - margin
-					rendered.append({"cp": e.cp, "xadv": e.xadv, "w": b.size.x, "h": b.size.y, "img": sub, "ox": ox, "oy": oy})
+				var sub := img.get_region(b)
+				var ox := b.position.x - margin
+				var oy := b.position.y - margin
+				rendered.append({"cp": e.cp, "xadv": e.xadv, "w": b.size.x, "h": b.size.y, "img": sub, "ox": ox, "oy": oy})
 		done += 1
 		if done == 1 or done == total or done % 5 == 0:
 			var pct := int(round(float(done) * 100.0 / float(maxi(total, 1))))
@@ -1277,7 +1288,52 @@ func _import_ttf(font_path: String, opts: Dictionary) -> void:
 	if open_btn:
 		open_btn.disabled = false
 
-func _draw_ttf_probe(ci: Control) -> void:
+func _render_ttf_glyph_layered(vp: SubViewport, ci: Control, font: Font, cp: int, font_size: int, margin: int, outline_px: int, outline_color: Color, fill_mode: int, gradient_dir: int, gradient_color1: Color, gradient_color2: Color, proc_effect: int, proc_color: Color) -> Image:
+	# Fill only: apply baked effect to the glyph fill, not the outline.
+	ci.set_meta("ds", {"font": font, "cp": cp, "size": font_size, "margin": margin, "outline": outline_px, "outline_color": outline_color, "draw_outline": false, "draw_fill": true})
+	vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+	ci.queue_redraw()
+	await RenderingServer.frame_post_draw
+	await RenderingServer.frame_post_draw
+	if not is_inside_tree():
+		return null
+	var fill_tex := vp.get_texture()
+	if fill_tex == null:
+		return null
+	var img_fill := fill_tex.get_image()
+	if img_fill == null:
+		return null
+	var fb := _alpha_bounds(img_fill)
+	if fb.size.x > 0 and fb.size.y > 0:
+		if fill_mode == 1:
+			_apply_gradient_to_bounds(img_fill, fb, gradient_dir, gradient_color1, gradient_color2)
+		elif fill_mode == 2:
+			_apply_procedural_to_bounds(img_fill, fb, proc_effect, proc_color)
+
+	# Outline only: keep its own color.
+	ci.set_meta("ds", {"font": font, "cp": cp, "size": font_size, "margin": margin, "outline": outline_px, "outline_color": outline_color, "draw_outline": true, "draw_fill": false})
+	vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+	ci.queue_redraw()
+	await RenderingServer.frame_post_draw
+	await RenderingServer.frame_post_draw
+	if not is_inside_tree():
+		return null
+	var out_tex := vp.get_texture()
+	if out_tex == null:
+		return img_fill
+	var img_outline := out_tex.get_image()
+	if img_outline == null:
+		return img_fill
+
+	# Composite: outline underneath/around, effected fill on top.
+	var result := Image.create(img_fill.get_width(), img_fill.get_height(), false, img_fill.get_format())
+	result.fill(Color(0, 0, 0, 0))
+	var full := Rect2i(Vector2i.ZERO, img_fill.get_size())
+	result.blit_rect(img_outline, full, Vector2i.ZERO)
+	result.blend_rect(img_fill, full, Vector2i.ZERO)
+	return result
+
+func _ttf_draw_glyph(ci: Control) -> void:
 	if not ci.has_meta("ds"): return
 	var ds: Dictionary = ci.get_meta("ds")
 	var font: Font = ds.font
@@ -1286,17 +1342,20 @@ func _draw_ttf_probe(ci: Control) -> void:
 	var margin: int = ds.margin
 	var outline: int = int(ds.get("outline", 0))
 	var outline_color: Color = ds.get("outline_color", Color.BLACK)
+	var draw_outline: bool = bool(ds.get("draw_outline", true))
+	var draw_fill: bool = bool(ds.get("draw_fill", true))
 	ci.draw_rect(Rect2(Vector2.ZERO, ci.size), Color(0, 0, 0, 0))
 	# draw baseline at margin+size
 	var baseline := Vector2(margin, margin + fsize)
 	var ch := String.chr(cp)
-	if outline > 0:
+	if draw_outline and outline > 0:
 		for oy in range(-outline, outline + 1):
 			for ox in range(-outline, outline + 1):
 				if ox == 0 and oy == 0: continue
 				if ox * ox + oy * oy > outline * outline: continue
 				ci.draw_char(font, baseline + Vector2(ox, oy), ch, fsize, outline_color)
-	ci.draw_char(font, baseline, ch, fsize, Color.WHITE)
+	if draw_fill:
+		ci.draw_char(font, baseline, ch, fsize, Color.WHITE)
 
 func _alpha_bounds(img: Image) -> Rect2i:
 	var w := img.get_width(); var h := img.get_height()
