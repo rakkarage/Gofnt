@@ -1513,6 +1513,12 @@ func _probe_image_path(path: String, lines: PackedStringArray) -> bool:
 	var candidates: PackedStringArray = [path, path + ".txt", path + ".bytes", path + ".bin"]
 	if path.get_extension().to_lower() == "png":
 		candidates.append(path.get_basename() + ".png.txt")
+	# de-duplicate while preserving order
+	var unique: PackedStringArray = []
+	for c in candidates:
+		if not unique.has(c):
+			unique.append(c)
+	candidates = unique
 	var any_ok := false
 	for p in candidates:
 		var exists := FileAccess.file_exists(p)
