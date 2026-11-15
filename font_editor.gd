@@ -34,6 +34,7 @@ var preview_scale: float = 2.0
 var sel_id: int = -1
 var _updating_ui := false
 var _ui_tinted := false
+var _generating_font := false
 const STATUS_ERROR_COLOR := Color(1.0, 0.42, 0.42, 1.0)
 const STATUS_WARN_COLOR := Color(1.0, 0.82, 0.45, 1.0)
 
@@ -426,6 +427,9 @@ func _apply_texture_filter(filter_mode: int) -> void:
 	# note: BMFont .fnt doesn't store Godot texture filter; this affects editor preview/atlas rendering.
 
 func _on_open() -> void:
+	if _generating_font:
+		_set_status("Font generation in progress...", false, true)
+		return
 	# Unified "Open" dialog: accepts BMFont .fnt, TTF/OTF fonts, and images.
 	# The selected file is routed to the appropriate loader based on its extension.
 	var dlg := FileDialog.new()
@@ -1112,7 +1116,21 @@ func _reset_ttf_dialog() -> void:
 	(ttf_dialog.get_node(g + "ProcColorPicker") as ColorPickerButton).color = defaults.get("proc_color", Color.WHITE)
 
 func _import_ttf(font_path: String, opts: Dictionary) -> void:
+	_generating_font = true
+	var open_btn := get_node_or_null("Main/Left/Toolbar/OpenBtn") as Button
+	if open_btn:
+		open_btn.disabled = true
+	var vp: SubViewport = null
+	var font_face := font_path.get_file().get_basename()
 	var font_size: int = int(opts.get("size", 16))
+	_set_status("Generating font from %s..." % font_face)
+	# Allow the status label to repaint before heavy work begins.
+	await get_tree().process_frame
+	if not is_inside_tree():
+		_generating_font = false
+		if open_btn:
+			open_btn.disabled = false
+		return
 	var charset: String = str(opts.get("charset", ""))
 	var filter_mode: int = int(opts.get("filter", 0))
 	var outline_px: int = int(opts.get("outline", 0))
@@ -1129,6 +1147,9 @@ func _import_ttf(font_path: String, opts: Dictionary) -> void:
 		# try loading as resource/data
 		var bytes := FileAccess.get_file_as_bytes(font_path)
 		if bytes.size() == 0:
+			_generating_font = false
+			if open_btn:
+				open_btn.disabled = false
 			_set_status("Failed to load TTF/OTF: %s" % font_path, true); return
 		font.data = bytes
 	var unique: Dictionary = {}
@@ -1140,8 +1161,6 @@ func _import_ttf(font_path: String, opts: Dictionary) -> void:
 			unique[cp] = true; order.append(cp)
 	if order.is_empty():
 		for cp in range(32, 127): order.append(cp)
-	# measure glyphs and render via SubViewport
-	await get_tree().process_frame
 	var pad := maxi(0, int(opts.get("padding", 0)))
 	var entries: Array = []
 	# collect metrics using font
@@ -1152,7 +1171,7 @@ func _import_ttf(font_path: String, opts: Dictionary) -> void:
 		if xadv <= 0: xadv = int(font_size / 2.0)
 		entries.append({"cp": cp, "ch": ch, "xadv": xadv})
 	# render in batches to get images: use one SubViewport and draw each char
-	var vp := SubViewport.new()
+	vp = SubViewport.new()
 	vp.disable_3d = true
 	vp.transparent_bg = true
 	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
@@ -1163,6 +1182,8 @@ func _import_ttf(font_path: String, opts: Dictionary) -> void:
 	ci.draw.connect(func(): _draw_ttf_probe(ci))
 	var rendered: Array = [] # {cp,xadv,img,ox,oy}
 	var margin := int(font_size) + outline_px + 2
+	var total := entries.size()
+	var done := 0
 	for e in entries:
 		var cw := int(font_size * 2) + margin * 2 + outline_px * 4
 		var chh := int(font_size * 2) + margin * 2 + outline_px * 4
@@ -1172,29 +1193,49 @@ func _import_ttf(font_path: String, opts: Dictionary) -> void:
 		ci.queue_redraw()
 		await RenderingServer.frame_post_draw
 		await RenderingServer.frame_post_draw
+		if not is_inside_tree():
+			if is_instance_valid(vp):
+				vp.queue_free()
+			_generating_font = false
+			return
 		var tex := vp.get_texture()
 		if tex == null:
 			rendered.append({"cp": e.cp, "xadv": e.xadv, "w": 0, "h": 0, "img": null, "ox": 0, "oy": 0})
-			continue
-		var img := tex.get_image()
-		if img == null:
-			rendered.append({"cp": e.cp, "xadv": e.xadv, "w": 0, "h": 0, "img": null, "ox": 0, "oy": 0})
-			continue
-		var b := _alpha_bounds(img)
-		if b.size.x <= 0 or b.size.y <= 0:
-			rendered.append({"cp": e.cp, "xadv": e.xadv, "w": 0, "h": 0, "img": null, "ox": 0, "oy": 0})
 		else:
-			if fill_mode == 1:
-				_apply_gradient_to_bounds(img, b, gradient_dir, gradient_color1, gradient_color2)
-			elif fill_mode == 2:
-				_apply_procedural_to_bounds(img, b, proc_effect, proc_color)
-			var sub := img.get_region(b)
-			var ox := b.position.x - margin
-			var oy := b.position.y - margin
-			rendered.append({"cp": e.cp, "xadv": e.xadv, "w": b.size.x, "h": b.size.y, "img": sub, "ox": ox, "oy": oy})
+			var img := tex.get_image()
+			if img == null:
+				rendered.append({"cp": e.cp, "xadv": e.xadv, "w": 0, "h": 0, "img": null, "ox": 0, "oy": 0})
+			else:
+				var b := _alpha_bounds(img)
+				if b.size.x <= 0 or b.size.y <= 0:
+					rendered.append({"cp": e.cp, "xadv": e.xadv, "w": 0, "h": 0, "img": null, "ox": 0, "oy": 0})
+				else:
+					if fill_mode == 1:
+						_apply_gradient_to_bounds(img, b, gradient_dir, gradient_color1, gradient_color2)
+					elif fill_mode == 2:
+						_apply_procedural_to_bounds(img, b, proc_effect, proc_color)
+					var sub := img.get_region(b)
+					var ox := b.position.x - margin
+					var oy := b.position.y - margin
+					rendered.append({"cp": e.cp, "xadv": e.xadv, "w": b.size.x, "h": b.size.y, "img": sub, "ox": ox, "oy": oy})
+		done += 1
+		if done == 1 or done == total or done % 5 == 0:
+			var pct := int(round(float(done) * 100.0 / float(maxi(total, 1))))
+			var ch_label: String = str(e.get("ch", ""))
+			var cpv := int(e.get("cp", 0))
+			if cpv == 32:
+				ch_label = "space"
+			elif cpv < 32 or cpv > 126:
+				ch_label = "U+%04X" % cpv
+			_set_status("Generating font: %d/%d glyphs (%d%%) — %s" % [done, total, pct, ch_label])
 	vp.queue_free()
+	_set_status("Packing font atlas...")
+	await get_tree().process_frame
 	var prefer_wide := int(opts.get("pack_tiebreaker", 0)) == 0
-	_pack_rendered_font(font_path.get_file().get_basename(), font_size, rendered, pad, filter_mode, prefer_wide)
+	_pack_rendered_font(font_face, font_size, rendered, pad, filter_mode, prefer_wide)
+	_generating_font = false
+	if open_btn:
+		open_btn.disabled = false
 
 func _draw_ttf_probe(ci: Control) -> void:
 	if not ci.has_meta("ds"): return
