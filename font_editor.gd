@@ -286,7 +286,6 @@ func _build_ui() -> void:
 	var open_ttf_btn := Button.new(); open_ttf_btn.text = "Import TTF/OTF"; open_ttf_btn.tooltip_text = "Generate a bitmap font atlas from a TTF/OTF at a chosen size (basic rasterization)"; open_ttf_btn.pressed.connect(_on_import_ttf); bar.add_child(open_ttf_btn)
 	var save_fnt_btn := Button.new(); save_fnt_btn.text = "Save .fnt"; save_fnt_btn.tooltip_text = "Save BMFont data to the loaded .fnt path"; save_fnt_btn.pressed.connect(_on_save_fnt); bar.add_child(save_fnt_btn)
 	var save_png_btn := Button.new(); save_png_btn.text = "Save PNG"; save_png_btn.tooltip_text = "Save atlas image to the loaded PNG path"; save_png_btn.pressed.connect(_on_save_png); bar.add_child(save_png_btn)
-	var probe_btn := Button.new(); probe_btn.text = "Probe Fonts"; probe_btn.tooltip_text = "Run diagnostics on bundled/example font files (paths, file access, parsing) to help debug web/export loading issues"; probe_btn.pressed.connect(_on_probe_fonts); bar.add_child(probe_btn)
 	bar.add_child(VSeparator.new())
 	var autoslice_btn := Button.new(); autoslice_btn.text = "Trim selected"; autoslice_btn.tooltip_text = "Trim selected glyph rect to non-transparent bounds"; autoslice_btn.pressed.connect(_on_autoslice_selected); bar.add_child(autoslice_btn)
 	var autoslice_all_btn := Button.new(); autoslice_all_btn.text = "Trim all"; autoslice_all_btn.tooltip_text = "Trim all glyph rects to non-transparent bounds (does not detect new glyphs)"; autoslice_all_btn.pressed.connect(_on_autoslice_all); bar.add_child(autoslice_all_btn)
@@ -299,48 +298,6 @@ func _build_ui() -> void:
 	bar.add_child(fullscreen_cb)
 	status_lbl = Label.new(); status_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL; status_lbl.text = ""; status_lbl.clip_text = true; left.add_child(status_lbl)
 
-	var examples_row := HBoxContainer.new(); left.add_child(examples_row)
-	load_demo_lbl = _lbl("Load Demo:")
-	load_demo_lbl.add_theme_color_override("font_color", Color(0.72, 0.84, 1.0))
-	examples_row.add_child(load_demo_lbl)
-	var load_dd := OptionButton.new()
-	load_dd.add_item("Select", 0)
-	load_dd.add_item("Super12", 2)
-	load_dd.add_item("Venice16", 1)
-	load_dd.tooltip_text = "Load an example bitmap font (.fnt + atlas) from bundled demos"
-	load_dd.item_selected.connect(func(i): _on_load_example(load_dd.get_item_id(i)); load_dd.select(0))
-	examples_row.add_child(load_dd)
-	examples_row.add_child(VSeparator.new())
-
-	import_demo_lbl = _lbl("Import Demo:")
-	import_demo_lbl.add_theme_color_override("font_color", Color(0.72, 0.84, 1.0))
-	examples_row.add_child(import_demo_lbl)
-	var import_dd := OptionButton.new()
-	import_dd.add_item("Select", 0)
-	for entry in _import_demo_paths():
-		import_dd.add_item(str(entry.name), import_dd.item_count + 1)
-		import_dd.set_item_metadata(import_dd.item_count - 1, str(entry.path))
-	import_dd.tooltip_text = "Import (rasterize) an included TTF/OTF demo font"
-	import_dd.item_selected.connect(func(i): _on_import_demo_selected(import_dd, i))
-	examples_row.add_child(import_dd)
-	examples_row.add_child(VSeparator.new())
-
-	apply_demo_lbl = _lbl("Apply Demo:")
-	apply_demo_lbl.add_theme_color_override("font_color", Color(0.72, 0.84, 1.0))
-	examples_row.add_child(apply_demo_lbl)
-	apply_dd = OptionButton.new()
-	for item in [
-		["None", 0],
-		["Super12 @1x (12)", 3],
-		["Super12 @2x (24)", 4],
-		["Venice16 @1x (16)", 1],
-		["Venice16 @2x (32)", 2],
-	]:
-		apply_dd.add_item(item[0], item[1])
-	apply_dd.tooltip_text = "Apply an example UI theme/font scale to the editor and preview"
-	apply_dd.item_selected.connect(func(i): _on_apply_example(apply_dd.get_item_id(i)))
-	apply_dd.select(apply_dd.get_item_index(1))
-	examples_row.add_child(apply_dd)
 
 	atlas = FontAtlasView.new()
 	atlas.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -959,38 +916,6 @@ func _example_paths() -> Dictionary:
 		2: "res://fnt/Super12.fnt",
 	}
 
-func _import_demo_paths() -> Array:
-	var out: Array = []
-	var dir := DirAccess.open("res://font")
-	if dir == null:
-		return out
-	dir.list_dir_begin()
-	var fn := dir.get_next()
-	while fn != "":
-		if not dir.current_is_dir():
-			var lower := fn.to_lower()
-			if lower.ends_with(".ttf") or lower.ends_with(".otf"):
-				out.append({"name": fn.get_basename(), "path": "res://font/" + fn})
-		fn = dir.get_next()
-	dir.list_dir_end()
-	out.sort_custom(func(a, b): return str(a.get("name", "")) < str(b.get("name", "")))
-	return out
-
-func _on_import_demo_selected(dd: OptionButton, i: int) -> void:
-	var item_id := dd.get_item_id(i)
-	if item_id <= 0:
-		dd.select(0)
-		return
-	var path := str(dd.get_item_metadata(i))
-	dd.select(0)
-	await _import_demo(path)
-
-func _import_demo(path: String) -> void:
-	if path == "":
-		return
-	var opts := _load_ttf_import_settings()
-	await _import_ttf(path, opts)
-
 func _on_load_example(id: int) -> void:
 	if id <= 0: return
 	var path: String = _example_paths().get(id, "")
@@ -1105,23 +1030,15 @@ func _show_ttf_options(font_path: String) -> void:
 	grid.add_child(_lbl("Atlas tiebreaker")); var tie_dir := OptionButton.new(); tie_dir.add_item("Prefer wide", 0); tie_dir.add_item("Prefer tall", 1); tie_dir.select(clampi(int(saved.get("pack_tiebreaker", 0)), 0, 1)); tie_dir.tooltip_text = "When atlas size candidates tie, prefer landscape (wide) or portrait (tall)"; grid.add_child(tie_dir)
 	grid.add_child(_lbl("Outline (px)")); var outline_sz := SpinBox.new(); outline_sz.min_value = 0; outline_sz.max_value = 8; outline_sz.value = int(saved.get("outline", 0)); outline_sz.step = 1; grid.add_child(outline_sz)
 	grid.add_child(_lbl("Outline color")); var outline_col := ColorPickerButton.new(); outline_col.color = saved.get("outline_color", Color.BLACK); outline_col.custom_minimum_size = Vector2(120, 0); grid.add_child(outline_col)
-	grid.add_child(_lbl("Fill")); var fill_mode := OptionButton.new(); fill_mode.add_item("Solid", 0); fill_mode.add_item("Gradient", 1); fill_mode.add_item("Stamp (image)", 2); fill_mode.add_item("Procedural", 3); fill_mode.select(clampi(int(saved.get("fill_mode", 0)), 0, 3)); grid.add_child(fill_mode)
+	grid.add_child(_lbl("Fill")); var fill_mode := OptionButton.new(); fill_mode.add_item("Solid", 0); fill_mode.add_item("Gradient", 1); fill_mode.add_item("Procedural", 2); fill_mode.select(clampi(int(saved.get("fill_mode", 0)), 0, 2)); grid.add_child(fill_mode)
 	grid.add_child(_lbl("Gradient")); var grad_dir := OptionButton.new(); grad_dir.add_item("Vertical (top-bottom)", 1); grad_dir.add_item("Horizontal (left-right)", 2); grad_dir.add_item("Diagonal (TL-BR)", 3); grad_dir.add_item("Diagonal (TR-BL)", 4); grad_dir.select(clampi(int(saved.get("gradient_dir", 1)) - 1, 0, 3)); grid.add_child(grad_dir)
 	grid.add_child(_lbl("Gradient from")); var grad_c1 := ColorPickerButton.new(); grad_c1.color = saved.get("gradient_color1", Color.WHITE); grad_c1.custom_minimum_size = Vector2(120, 0); grid.add_child(grad_c1)
 	grid.add_child(_lbl("Gradient to")); var grad_c2 := ColorPickerButton.new(); grad_c2.color = saved.get("gradient_color2", Color(0.7, 0.85, 1.0, 1.0)); grad_c2.custom_minimum_size = Vector2(120, 0); grid.add_child(grad_c2)
-	grid.add_child(_lbl("Stamp image")); var stamp_row := HBoxContainer.new(); stamp_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL; var stamp_path := LineEdit.new(); stamp_path.text = str(saved.get("stamp_path", "")); stamp_path.placeholder_text = "Path to image (png, jpg, webp...)"; stamp_path.size_flags_horizontal = Control.SIZE_EXPAND_FILL; stamp_row.add_child(stamp_path); var stamp_browse := Button.new(); stamp_browse.text = "Browse..."; stamp_row.add_child(stamp_browse); grid.add_child(stamp_row)
-	grid.add_child(_lbl("Stamp mapping")); var stamp_tile := OptionButton.new(); stamp_tile.add_item("Tile", 0); stamp_tile.add_item("Fit to glyph", 1); stamp_tile.select(0 if bool(saved.get("stamp_tile", true)) else 1); grid.add_child(stamp_tile)
 	grid.add_child(_lbl("Procedural effect")); var proc_effect := OptionButton.new(); proc_effect.add_item("Scanlines", 0); proc_effect.add_item("Bayer dither", 1); proc_effect.add_item("Checker", 2); proc_effect.add_item("Noise grain", 3); proc_effect.add_item("Edge tint / bevel", 4); proc_effect.select(clampi(int(saved.get("proc_effect", 0)), 0, 4)); grid.add_child(proc_effect)
 	grid.add_child(_lbl("Procedural color")); var proc_color := ColorPickerButton.new(); proc_color.color = saved.get("proc_color", Color.WHITE); proc_color.custom_minimum_size = Vector2(120, 0); grid.add_child(proc_color)
 	grid.add_child(_lbl("Charset")); var chars := TextEdit.new(); chars.text = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"; chars.custom_minimum_size = Vector2(420, 80); chars.size_flags_vertical = Control.SIZE_FILL; chars.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY; grid.add_child(chars)
 
-	var info := Label.new(); info.text = "Rasterizes glyphs into a new bitmap atlas. Filter affects preview/texture sampling; outline, gradient, image stamps, and procedural effects are baked into the atlas (tinting visible glyph pixels). Settings are remembered for next time."; info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; vb.add_child(info)
-
-	var stamp_fd := FileDialog.new(); stamp_fd.file_mode = FileDialog.FILE_MODE_OPEN_FILE; stamp_fd.access = FileDialog.ACCESS_FILESYSTEM; stamp_fd.filters = PackedStringArray(["*.png,*.jpg,*.jpeg,*.webp,*.bmp ; Image files"]); stamp_fd.title = "Choose Stamp Image"
-	stamp_fd.file_selected.connect(func(path): stamp_path.text = path)
-	_register_file_dialog(stamp_fd)
-	d.add_child(stamp_fd)
-	stamp_browse.pressed.connect(func(): stamp_fd.popup_centered(Vector2i(700, 500)))
+	var info := Label.new(); info.text = "Rasterizes glyphs into a new bitmap atlas. Filter affects preview/texture sampling; outline, gradient, and procedural effects are baked into the atlas (tinting visible glyph pixels). Settings are remembered for next time."; info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; vb.add_child(info)
 
 	var reset_btn := d.add_button("Reset", false, "reset")
 	reset_btn.pressed.connect(func():
@@ -1136,8 +1053,6 @@ func _show_ttf_options(font_path: String) -> void:
 		grad_dir.select(clampi(int(defaults.get("gradient_dir", 1)) - 1, 0, 3))
 		grad_c1.color = defaults.get("gradient_color1", Color.WHITE)
 		grad_c2.color = defaults.get("gradient_color2", Color(0.7, 0.85, 1.0, 1.0))
-		stamp_path.text = str(defaults.get("stamp_path", ""))
-		stamp_tile.select(0 if bool(defaults.get("stamp_tile", true)) else 1)
 		proc_effect.select(clampi(int(defaults.get("proc_effect", 0)), 0, 4))
 		proc_color.color = defaults.get("proc_color", Color.WHITE)
 	)
@@ -1156,8 +1071,6 @@ func _show_ttf_options(font_path: String) -> void:
 			"gradient_dir": int(grad_dir.get_selected_id()),
 			"gradient_color1": grad_c1.color,
 			"gradient_color2": grad_c2.color,
-			"stamp_path": stamp_path.text.strip_edges(),
-			"stamp_tile": stamp_tile.get_selected_id() == 0,
 			"proc_effect": int(proc_effect.get_selected_id()),
 			"proc_color": proc_color.color,
 		}
@@ -1182,20 +1095,8 @@ func _import_ttf(font_path: String, opts: Dictionary) -> void:
 	var gradient_dir: int = int(opts.get("gradient_dir", 1))
 	var gradient_color1: Color = opts.get("gradient_color1", Color.WHITE)
 	var gradient_color2: Color = opts.get("gradient_color2", Color.WHITE)
-	var stamp_path: String = str(opts.get("stamp_path", "")).strip_edges()
-	var stamp_tile: bool = bool(opts.get("stamp_tile", true))
 	var proc_effect: int = int(opts.get("proc_effect", 0))
 	var proc_color: Color = opts.get("proc_color", Color.WHITE)
-	var stamp_img: Image = null
-	if fill_mode == 2 and stamp_path != "":
-		stamp_img = Image.new()
-		var serr := stamp_img.load(stamp_path)
-		if serr != OK:
-			_set_status("Failed to load stamp image: %s" % stamp_path, true)
-			stamp_img = null
-	if fill_mode == 2 and stamp_img == null:
-		_set_status("Stamp fill selected but no valid stamp image; using solid fill.", false, true)
-		fill_mode = 0
 	var font := FontFile.new()
 	var err := font.load_dynamic_font(font_path)
 	if err != OK:
@@ -1259,9 +1160,7 @@ func _import_ttf(font_path: String, opts: Dictionary) -> void:
 		else:
 			if fill_mode == 1:
 				_apply_gradient_to_bounds(img, b, gradient_dir, gradient_color1, gradient_color2)
-			elif fill_mode == 2 and stamp_img != null:
-				_apply_stamp_to_bounds(img, b, stamp_img, stamp_tile)
-			elif fill_mode == 3:
+			elif fill_mode == 2:
 				_apply_procedural_to_bounds(img, b, proc_effect, proc_color)
 			var sub := img.get_region(b)
 			var ox := b.position.x - margin
