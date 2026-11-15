@@ -45,28 +45,13 @@ size_flags_horizontal = 3
 
 [node name="OpenBtn" type="Button" parent="Main/Left/Toolbar" unique_id=697674023]
 layout_mode = 2
-tooltip_text = "Load a BMFont .fnt (text/XML) and its atlas PNG"
-text = "Open .fnt"
-
-[node name="ImportImageBtn" type="Button" parent="Main/Left/Toolbar" unique_id=21664262]
-layout_mode = 2
-tooltip_text = "Import a PNG and auto-detect glyph regions (creates a new font)"
-text = "Import Image"
-
-[node name="ImportTtfBtn" type="Button" parent="Main/Left/Toolbar" unique_id=791277077]
-layout_mode = 2
-tooltip_text = "Generate a bitmap font atlas from a TTF/OTF at a chosen size (basic rasterization)"
-text = "Import TTF/OTF"
+tooltip_text = "Open a font or image (FNT/TTF/OTF/PNG/WEBP/...)"
+text = "Open..."
 
 [node name="SaveFntBtn" type="Button" parent="Main/Left/Toolbar" unique_id=2133824506]
 layout_mode = 2
-tooltip_text = "Save BMFont data to the loaded .fnt path"
-text = "Save .fnt"
-
-[node name="SavePngBtn" type="Button" parent="Main/Left/Toolbar" unique_id=1196718257]
-layout_mode = 2
-tooltip_text = "Save atlas image to the loaded PNG path"
-text = "Save PNG"
+tooltip_text = "Save both .fnt and atlas PNG (PNG name derived from .fnt when needed)"
+text = "Save"
 
 [node name="VSep1" type="VSeparator" parent="Main/Left/Toolbar" unique_id=1355346282]
 layout_mode = 2

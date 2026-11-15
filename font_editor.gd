@@ -277,10 +277,7 @@ func _bind_ui() -> void:
 
 	# Toolbar buttons
 	$Main/Left/Toolbar/OpenBtn.pressed.connect(_on_open)
-	$Main/Left/Toolbar/ImportImageBtn.pressed.connect(_on_import_image)
-	$Main/Left/Toolbar/ImportTtfBtn.pressed.connect(_on_import_ttf)
-	$Main/Left/Toolbar/SaveFntBtn.pressed.connect(_on_save_fnt)
-	$Main/Left/Toolbar/SavePngBtn.pressed.connect(_on_save_png)
+	$Main/Left/Toolbar/SaveFntBtn.pressed.connect(_on_save)
 	$Main/Left/Toolbar/TrimSelectedBtn.pressed.connect(_on_autoslice_selected)
 	$Main/Left/Toolbar/TrimAllBtn.pressed.connect(_on_autoslice_all)
 	$Main/Left/Toolbar/RepackBtn.pressed.connect(_on_repack)
@@ -369,6 +366,22 @@ func _refresh_preview() -> void:
 		for key in ["x", "y", "width", "height", "xoffset", "yoffset", "xadvance"]:
 			c[key] = int(c.get(key, 0)) * s
 		preview_data.chars[id] = c
+	# Fill in (empty) glyphs for missing codepoints so the preview does not
+	# render tofu/boxes for characters that have no defined glyph yet.
+	var _space_adv := 0
+	if preview_data.chars.has(32):
+		_space_adv = int(preview_data.chars[32].get("xadvance", 0))
+	if _space_adv <= 0:
+		_space_adv = maxi(4, int(preview_data.common.get("lineHeight", 16) / 2) * s)
+	var _needed := {}
+	for _id in range(32, 127):
+		_needed[_id] = true
+	if preview_edit != null:
+		for _i in preview_edit.text.length():
+			_needed[preview_edit.text.unicode_at(_i)] = true
+	for _id in _needed.keys():
+		if not preview_data.chars.has(_id):
+			preview_data.chars[_id] = {"id": _id, "x": 0, "y": 0, "width": 0, "height": 0, "xoffset": 0, "yoffset": 0, "xadvance": _space_adv, "page": 0, "chnl": 15}
 	preview_data.kernings = []
 	for k in data.kernings:
 		var kk: Dictionary = (k as Dictionary).duplicate()
@@ -420,6 +433,7 @@ func _on_open() -> void:
 	dlg.file_mode = FileDialog.FILE_MODE_OPEN_FILE
 	dlg.access = FileDialog.ACCESS_FILESYSTEM
 	dlg.filters = PackedStringArray([
+		"* ; All files",
 		"*.fnt ; BMFont (.fnt)",
 		"*.ttf,*.otf ; TrueType/OpenType Font (.ttf/.otf)",
 		"*.png,*.webp,*.jpg,*.jpeg,*.bmp ; Image (.png/.webp/...)",
@@ -427,14 +441,24 @@ func _on_open() -> void:
 	add_child(dlg)
 	_register_file_dialog(dlg)
 	dlg.file_selected.connect(func(p: String):
-		var ext := p.get_extension().to_lower()
-		match ext:
-			"fnt":
-				_load_font(p)
-			"ttf", "otf":
-				_show_ttf_options(p)
-			_:
-				_import_image(p)
+		var path := p
+		# Godot may append the selected filter's extension if it thinks the
+		# chosen file does not match; recover the real file when possible.
+		if not FileAccess.file_exists(path):
+			for ext in [".fnt", ".ttf", ".otf", ".png", ".webp", ".jpg", ".jpeg", ".bmp"]:
+				if path.to_lower().ends_with(ext) and path.length() > ext.length():
+					var stripped := path.substr(0, path.length() - ext.length())
+					# If stripping the last extension yields an existing file, use it.
+					if FileAccess.file_exists(stripped):
+						path = stripped
+						break
+		var low := path.to_lower()
+		if low.ends_with(".fnt"):
+			_load_font(path)
+		elif low.ends_with(".ttf") or low.ends_with(".otf"):
+			_show_ttf_options(path)
+		else:
+			_import_image(path)
 		dlg.queue_free()
 	)
 	dlg.canceled.connect(func(): dlg.queue_free())
@@ -625,6 +649,52 @@ func _bulk_advance(delta: int) -> void:
 		data.chars[id]["xadvance"] = int(data.chars[id].get("xadvance", 0)) + delta
 	_sync_props(); _refresh_glyph_list(); _refresh_preview(); _set_status("Applied xadvance %+d to all glyphs" % delta)
 
+func _on_save() -> void:
+	if data == null or data.image == null:
+		_set_status("Nothing to save"); return
+	if data.fnt_path == "":
+		var dlg := FileDialog.new()
+		dlg.file_mode = FileDialog.FILE_MODE_SAVE_FILE
+		dlg.access = FileDialog.ACCESS_FILESYSTEM
+		dlg.filters = PackedStringArray([
+			"* ; All files",
+			"*.fnt ; BMFont (.fnt)",
+		])
+		dlg.current_file = str(data.info.get("face", "font")) + ".fnt"
+		add_child(dlg)
+		_register_file_dialog(dlg)
+		dlg.file_selected.connect(func(p: String):
+			var path := p
+			if not path.to_lower().ends_with(".fnt"):
+				path += ".fnt"
+			data.fnt_path = path
+			if data.image_path == "":
+				data.image_path = path.get_basename() + ".png"
+			_save_both()
+			dlg.queue_free()
+		)
+		dlg.canceled.connect(func(): dlg.queue_free())
+		dlg.popup_centered_ratio(0.7)
+		return
+	if data.image_path == "":
+		data.image_path = data.fnt_path.get_basename() + ".png"
+	_save_both()
+
+func _save_both() -> void:
+	if data == null or data.image == null:
+		_set_status("Nothing to save"); return
+	var e1 := data.save_fnt(data.fnt_path)
+	if e1 == OK and not data.pages.is_empty():
+		var page_file := data.fnt_path.get_file().get_basename() + ".png"
+		if data.image_path != "":
+			page_file = data.image_path.get_file()
+		data.pages[0]["file"] = page_file
+	var e2 := data.save_png(data.image_path)
+	if e1 == OK and e2 == OK:
+		_set_status("Saved .fnt (%s) and PNG (%s)" % [data.fnt_path, data.image_path])
+	else:
+		_set_status("Save failed: fnt=%d png=%d" % [e1, e2], true)
+
 func _on_save_fnt() -> void:
 	if data == null or data.image == null:
 		_set_status("Nothing to save"); return
@@ -648,15 +718,15 @@ func _prompt_save_unified() -> void:
 	add_child(dlg)
 	_register_file_dialog(dlg)
 	dlg.file_selected.connect(func(p: String):
-		var ext := p.get_extension().to_lower()
-		if ext == "fnt":
+		var low := p.to_lower()
+		if low.ends_with(".fnt"):
 			data.fnt_path = p
 			if data.image_path == "":
 				data.image_path = p.get_basename() + ".png"
 			_do_save_fnt()
 		else:
 			var out := p
-			if not out.to_lower().ends_with(".png"):
+			if not low.ends_with(".png"):
 				out += ".png"
 			data.image_path = out
 			_do_save_png()
@@ -668,7 +738,10 @@ func _prompt_save_unified() -> void:
 func _do_save_fnt() -> void:
 	var err := data.save_fnt(data.fnt_path)
 	if err == OK and not data.pages.is_empty():
-		data.pages[0]["file"] = data.fnt_path.get_file().get_basename() + ".png"
+		var page_file := data.fnt_path.get_file().get_basename() + ".png"
+		if data.image_path != "":
+			page_file = data.image_path.get_file()
+		data.pages[0]["file"] = page_file
 	_set_status("Saved .fnt to %s" % data.fnt_path if err == OK else "Save failed: %d" % err, err != OK)
 
 func _on_save_png() -> void:
@@ -815,10 +888,6 @@ func _remove_kern() -> void:
 	var meta = kern_list.get_item_metadata(sel[0])
 	data.kernings.erase(meta)
 	_refresh_kern(); _refresh_preview(); _refresh_stats(); _set_status("Removed kerning pair")
-
-func _on_import_image() -> void:
-	# Unified open dialog (accepts images and other supported formats).
-	_on_open()
 
 func _import_image(path: String) -> void:
 	var img := Image.load_from_file(path)
@@ -995,10 +1064,6 @@ func _save_apply_settings(idx: int) -> void:
 	cfg.load(SETTINGS_PATH)
 	cfg.set_value(SETTINGS_UI_SECTION, SETTINGS_APPLY_DEMO_KEY, idx)
 	cfg.save(SETTINGS_PATH)
-
-func _on_import_ttf() -> void:
-	# Unified open dialog (accepts TTF/OTF and other supported formats).
-	_on_open()
 
 func _show_ttf_options(font_path: String) -> void:
 	_ttf_font_path = font_path

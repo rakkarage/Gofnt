@@ -282,7 +282,10 @@ func save_fnt(path: String) -> Error:
 	var f := FileAccess.open(path, FileAccess.WRITE)
 	if f == null: return FileAccess.get_open_error()
 	if not pages.is_empty():
-		pages[0]["file"] = path.get_file().get_basename() + ".png"
+		var page_file := path.get_file().get_basename() + ".png"
+		if image_path != "":
+			page_file = image_path.get_file()
+		pages[0]["file"] = page_file
 	f.store_string(to_fnt_text())
 	return OK
 
