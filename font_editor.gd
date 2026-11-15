@@ -11,23 +11,26 @@ const SETTINGS_FILEDIALOG_SECTION := "file_dialog"
 const SETTINGS_FILEDIALOG_FAVORITES_KEY := "favorites"
 
 var data: BMFontData
-var atlas: Control
-var glyph_list: ItemList
-var glyph_jump_edit: LineEdit
-var status_lbl: Label
-var preview_edit: TextEdit
-var stats_lbl: RichTextLabel
+@onready var atlas: Control = $Main/Left/Atlas
+@onready var glyph_list: ItemList = $Main/Tabs/Glyph/GlyphList
+@onready var glyph_jump_edit: LineEdit = $Main/Tabs/Glyph/AddRow/GlyphJumpEdit
+@onready var status_lbl: Label = $Main/Left/StatusLbl
+@onready var preview_edit: TextEdit = $Main/Left/PreviewEdit
+@onready var stats_lbl: RichTextLabel = $Main/Tabs/FontStats/StatsLbl
+@onready var preview_lbl: Label = $Main/Left/PreviewLbl
 var load_demo_lbl: Label
 var apply_demo_lbl: Label
-var preview_lbl: Label
 var import_demo_lbl: Label
-var kern_list: ItemList
+@onready var kern_list: ItemList = $Main/Tabs/Kerning/KernList
 var prop_spin: Dictionary = {}
-var font_line_h: SpinBox
-var font_base: SpinBox
-var glyph_action_btn: Button
-var fullscreen_cb: CheckBox
+@onready var font_line_h: SpinBox = $Main/Tabs/FontStats/FontGrid/FontLineH
+@onready var font_base: SpinBox = $Main/Tabs/FontStats/FontGrid/FontBase
+@onready var glyph_action_btn: Button = $Main/Tabs/Glyph/GlyphActionBtn
+@onready var fullscreen_cb: CheckBox = $Main/Left/Toolbar/FullscreenCb
 var apply_dd: OptionButton
+var _ttf_font_path: String = ""
+@onready var ttf_dialog: AcceptDialog = $TtfDialog
+@onready var probe_dialog: AcceptDialog = $ProbeDialog
 var preview_scale: float = 2.0
 var sel_id: int = -1
 var _updating_ui := false
@@ -38,7 +41,7 @@ const STATUS_WARN_COLOR := Color(1.0, 0.82, 0.45, 1.0)
 func _ready() -> void:
 	name = "Gofnt"
 	data = BMFontData.new()
-	_build_ui()
+	_bind_ui()
 	_apply_ui_tint()
 	set_process_unhandled_input(true)
 	_apply_project_default_theme()
@@ -266,121 +269,85 @@ func _set_status(t: String, is_error: bool = false, is_warn: bool = false) -> vo
 	else:
 		status_lbl.remove_theme_color_override("font_color")
 
-func _build_ui() -> void:
-	var root := HBoxContainer.new()
-	root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	root.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	add_child(root)
-
-	# Left: toolbar + atlas + preview
-	var left := VBoxContainer.new()
-	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	left.size_flags_stretch_ratio = 3.0
-	root.add_child(left)
-
-	var bar := HFlowContainer.new()
-	bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	left.add_child(bar)
-	var open_btn := Button.new(); open_btn.text = "Open .fnt"; open_btn.tooltip_text = "Load a BMFont .fnt (text/XML) and its atlas PNG"; open_btn.pressed.connect(_on_open); bar.add_child(open_btn)
-	var open_img_btn := Button.new(); open_img_btn.text = "Import Image"; open_img_btn.tooltip_text = "Import a PNG and auto-detect glyph regions (creates a new font)"; open_img_btn.pressed.connect(_on_import_image); bar.add_child(open_img_btn)
-	var open_ttf_btn := Button.new(); open_ttf_btn.text = "Import TTF/OTF"; open_ttf_btn.tooltip_text = "Generate a bitmap font atlas from a TTF/OTF at a chosen size (basic rasterization)"; open_ttf_btn.pressed.connect(_on_import_ttf); bar.add_child(open_ttf_btn)
-	var save_fnt_btn := Button.new(); save_fnt_btn.text = "Save .fnt"; save_fnt_btn.tooltip_text = "Save BMFont data to the loaded .fnt path"; save_fnt_btn.pressed.connect(_on_save_fnt); bar.add_child(save_fnt_btn)
-	var save_png_btn := Button.new(); save_png_btn.text = "Save PNG"; save_png_btn.tooltip_text = "Save atlas image to the loaded PNG path"; save_png_btn.pressed.connect(_on_save_png); bar.add_child(save_png_btn)
-	bar.add_child(VSeparator.new())
-	var autoslice_btn := Button.new(); autoslice_btn.text = "Trim selected"; autoslice_btn.tooltip_text = "Trim selected glyph rect to non-transparent bounds"; autoslice_btn.pressed.connect(_on_autoslice_selected); bar.add_child(autoslice_btn)
-	var autoslice_all_btn := Button.new(); autoslice_all_btn.text = "Trim all"; autoslice_all_btn.tooltip_text = "Trim all glyph rects to non-transparent bounds (does not detect new glyphs)"; autoslice_all_btn.pressed.connect(_on_autoslice_all); bar.add_child(autoslice_all_btn)
-	var repack_btn := Button.new(); repack_btn.text = "Repack"; repack_btn.tooltip_text = "Shelf-pack glyphs into a tighter power-of-two atlas"; repack_btn.pressed.connect(_on_repack); bar.add_child(repack_btn)
-	bar.add_child(VSeparator.new())
-	fullscreen_cb = CheckBox.new()
-	fullscreen_cb.text = "Fullscreen (F11)"
-	fullscreen_cb.tooltip_text = "Toggle fullscreen window mode (persisted across runs)"
-	fullscreen_cb.toggled.connect(func(pressed: bool): _set_fullscreen(pressed, true))
-	bar.add_child(fullscreen_cb)
-	status_lbl = Label.new(); status_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL; status_lbl.text = ""; status_lbl.clip_text = true; left.add_child(status_lbl)
-
-
-	atlas = FontAtlasView.new()
-	atlas.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	atlas.size_flags_stretch_ratio = 3.0
-	atlas.custom_minimum_size = Vector2(400, 300)
-	atlas.glyph_selected.connect(_on_glyph_selected)
-	atlas.glyph_changed.connect(_on_glyph_changed)
-	left.add_child(atlas)
-
-	preview_lbl = Label.new(); preview_lbl.text = "Live preview"
-	preview_lbl.add_theme_color_override("font_color", Color(0.72, 0.84, 1.0))
-	left.add_child(preview_lbl)
-	preview_edit = TextEdit.new()
-	preview_edit.text = "The quick brown fox jumps over the lazy dog.\n0123456789 !?@#$%"
-	preview_edit.custom_minimum_size = Vector2(0, 160)
-	preview_edit.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	preview_edit.scroll_fit_content_height = false
-	preview_edit.text_changed.connect(func(): pass )
-	left.add_child(preview_edit)
-
-	# Right: tabs
-	var tabs := TabContainer.new()
-	tabs.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	root.add_child(tabs)
-
-	tabs.add_child(_build_glyph_tab())
+func _bind_ui() -> void:
+	# Scene provides nodes; wire signals here.
+	var tabs := $Main/Tabs as TabContainer
 	tabs.set_tab_title(0, "Glyph")
-	tabs.add_child(_build_font_tab())
 	tabs.set_tab_title(1, "Font/Stats")
-	tabs.add_child(_build_kern_tab())
 	tabs.set_tab_title(2, "Kerning")
 
-func _build_glyph_tab() -> Control:
-	var vb := VBoxContainer.new()
-	glyph_list = ItemList.new(); glyph_list.size_flags_vertical = Control.SIZE_EXPAND_FILL; glyph_list.custom_minimum_size = Vector2(0, 180)
+	# Toolbar buttons
+	$Main/Left/Toolbar/OpenBtn.pressed.connect(_on_open)
+	$Main/Left/Toolbar/ImportImageBtn.pressed.connect(_on_import_image)
+	$Main/Left/Toolbar/ImportTtfBtn.pressed.connect(_on_import_ttf)
+	$Main/Left/Toolbar/SaveFntBtn.pressed.connect(_on_save_fnt)
+	$Main/Left/Toolbar/SavePngBtn.pressed.connect(_on_save_png)
+	$Main/Left/Toolbar/TrimSelectedBtn.pressed.connect(_on_autoslice_selected)
+	$Main/Left/Toolbar/TrimAllBtn.pressed.connect(_on_autoslice_all)
+	$Main/Left/Toolbar/RepackBtn.pressed.connect(_on_repack)
+	fullscreen_cb.toggled.connect(func(pressed: bool): _set_fullscreen(pressed, true))
+
+	atlas.glyph_selected.connect(_on_glyph_selected)
+	atlas.glyph_changed.connect(_on_glyph_changed)
+
 	glyph_list.item_selected.connect(_on_list_selected)
-	vb.add_child(glyph_list)
-	var add_row := HBoxContainer.new(); vb.add_child(add_row)
-	glyph_jump_edit = LineEdit.new(); glyph_jump_edit.placeholder_text = "Enter char or id (e.g. A or 65)"; glyph_jump_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL; add_row.add_child(glyph_jump_edit)
-	var add_btn := Button.new(); add_btn.text = "Add / Go"; add_btn.tooltip_text = "Create (if missing) and select glyph for the given character or numeric id"; add_row.add_child(add_btn)
-	add_btn.pressed.connect(func(): _add_or_select_glyph(glyph_jump_edit.text))
+
 	glyph_jump_edit.text_submitted.connect(func(_t): _add_or_select_glyph(glyph_jump_edit.text))
-	glyph_action_btn = Button.new(); glyph_action_btn.text = "Create glyph"; glyph_action_btn.disabled = true
-	glyph_action_btn.tooltip_text = "Create or delete the selected glyph entry"
+
+	var add_go_btn := $Main/Tabs/Glyph/AddRow/AddGoBtn as Button
+	add_go_btn.pressed.connect(func(): _add_or_select_glyph(glyph_jump_edit.text))
+
 	glyph_action_btn.pressed.connect(_on_glyph_action)
-	vb.add_child(glyph_action_btn)
-	var grid := GridContainer.new(); grid.columns = 2; vb.add_child(grid)
-	for key in ["x", "y", "width", "height", "xoffset", "yoffset", "xadvance"]:
-		var l := Label.new(); l.text = key; grid.add_child(l)
-		var s := SpinBox.new(); s.min_value = -4096; s.max_value = 4096; s.step = 1; s.allow_greater = true; s.allow_lesser = true
-		s.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		s.value_changed.connect(func(v): _on_prop_changed(key, int(v)))
-		grid.add_child(s)
-		prop_spin[key] = s
-	return vb
 
-func _build_font_tab() -> Control:
-	var vb := VBoxContainer.new()
-	var g := GridContainer.new(); g.columns = 2; vb.add_child(g)
-	g.add_child(_lbl("lineHeight")); font_line_h = SpinBox.new(); font_line_h.max_value = 4096; font_line_h.value_changed.connect(func(v): if not _updating_ui: data.common["lineHeight"] = int(v); _refresh_preview()); font_line_h.size_flags_horizontal = Control.SIZE_EXPAND_FILL; g.add_child(font_line_h)
-	g.add_child(_lbl("base")); font_base = SpinBox.new(); font_base.max_value = 4096; font_base.value_changed.connect(func(v): if not _updating_ui: data.common["base"] = int(v)); font_base.size_flags_horizontal = Control.SIZE_EXPAND_FILL; g.add_child(font_base)
-	var bulk := HBoxContainer.new(); vb.add_child(bulk)
-	bulk.add_child(_lbl("All xadvance +")); var ba := SpinBox.new(); ba.min_value = -999; ba.max_value = 999; ba.value = 0; bulk.add_child(ba)
-	var bbtn := Button.new(); bbtn.text = "Apply"; bbtn.pressed.connect(func(): _bulk_advance(int(ba.value))); bulk.add_child(bbtn)
-	var st := Label.new(); st.text = "Stats & details"; vb.add_child(st)
-	stats_lbl = RichTextLabel.new(); stats_lbl.fit_content = true; stats_lbl.size_flags_vertical = Control.SIZE_EXPAND_FILL; stats_lbl.bbcode_enabled = true
-	vb.add_child(stats_lbl)
-	return vb
+	# prop spin map + connections
+	var keys := ["x", "y", "width", "height", "xoffset", "yoffset", "xadvance"]
+	for key in keys:
+		var spin := get_node("Main/Tabs/Glyph/PropsGrid/PropSpin" + key.capitalize()) as SpinBox
+		prop_spin[key] = spin
+		spin.value_changed.connect(func(v): _on_prop_changed(key, int(v)))
 
-func _build_kern_tab() -> Control:
-	var vb := VBoxContainer.new()
-	vb.add_child(_lbl("Kerning pairs"))
-	kern_list = ItemList.new(); kern_list.size_flags_vertical = Control.SIZE_EXPAND_FILL; vb.add_child(kern_list)
-	var row := HBoxContainer.new(); vb.add_child(row)
-	var f1 := LineEdit.new(); f1.placeholder_text = "first char"; f1.custom_minimum_size = Vector2(60, 0); row.add_child(f1)
-	var f2 := LineEdit.new(); f2.placeholder_text = "second"; f2.custom_minimum_size = Vector2(60, 0); row.add_child(f2)
-	var amt := SpinBox.new(); amt.min_value = -200; amt.max_value = 200; row.add_child(amt)
-	var addb := Button.new(); addb.text = "Add/Set"; addb.pressed.connect(func(): _add_kern(f1.text, f2.text, int(amt.value))); row.add_child(addb)
-	var delb := Button.new(); delb.text = "Remove sel"; delb.pressed.connect(_remove_kern); vb.add_child(delb)
-	return vb
+	font_line_h.value_changed.connect(func(v): if not _updating_ui: data.common["lineHeight"] = int(v); _refresh_preview())
+	font_base.value_changed.connect(func(v): if not _updating_ui: data.common["base"] = int(v))
 
-func _lbl(t: String) -> Label:
-	var l := Label.new(); l.text = t; return l
+	var bulk_spin := $Main/Tabs/FontStats/BulkRow/BulkSpin as SpinBox
+	var bulk_btn := $Main/Tabs/FontStats/BulkRow/BulkApplyBtn as Button
+	bulk_btn.pressed.connect(func(): _bulk_advance(int(bulk_spin.value)))
+
+	var kern_first := $Main/Tabs/Kerning/KernRow/KernFirstEdit as LineEdit
+	var kern_second := $Main/Tabs/Kerning/KernRow/KernSecondEdit as LineEdit
+	var kern_amt := $Main/Tabs/Kerning/KernRow/KernAmountSpin as SpinBox
+	var kern_add := $Main/Tabs/Kerning/KernRow/KernAddBtn as Button
+	kern_add.pressed.connect(func(): _add_kern(kern_first.text, kern_second.text, int(kern_amt.value)))
+	var kern_remove := $Main/Tabs/Kerning/KernRemoveBtn as Button
+	kern_remove.pressed.connect(_remove_kern)
+
+	# TTF import dialog
+	ttf_dialog.canceled.connect(func(): ttf_dialog.hide())
+	probe_dialog.canceled.connect(func(): probe_dialog.hide())
+	probe_dialog.confirmed.connect(func(): probe_dialog.hide())
+	var ttf_reset_btn := ttf_dialog.get_node("Scroll/VBox/ResetBtn") as Button
+	ttf_reset_btn.pressed.connect(_reset_ttf_dialog)
+	ttf_dialog.confirmed.connect(func():
+		var g := "Scroll/VBox/Grid/"
+		var opts := {
+			"size": int((ttf_dialog.get_node(g + "SizeSpin") as SpinBox).value),
+			"charset": (ttf_dialog.get_node(g + "CharsetEdit") as TextEdit).text,
+			"filter": int((ttf_dialog.get_node(g + "FilterOption") as OptionButton).get_selected_id()),
+			"padding": int((ttf_dialog.get_node(g + "PaddingSpin") as SpinBox).value),
+			"pack_tiebreaker": int((ttf_dialog.get_node(g + "TieOption") as OptionButton).get_selected_id()),
+			"outline": int((ttf_dialog.get_node(g + "OutlineSpin") as SpinBox).value),
+			"outline_color": (ttf_dialog.get_node(g + "OutlineColorPicker") as ColorPickerButton).color,
+			"fill_mode": int((ttf_dialog.get_node(g + "FillOption") as OptionButton).get_selected_id()),
+			"gradient_dir": int((ttf_dialog.get_node(g + "GradientOption") as OptionButton).get_selected_id()),
+			"gradient_color1": (ttf_dialog.get_node(g + "GradFromPicker") as ColorPickerButton).color,
+			"gradient_color2": (ttf_dialog.get_node(g + "GradToPicker") as ColorPickerButton).color,
+			"proc_effect": int((ttf_dialog.get_node(g + "ProcEffectOption") as OptionButton).get_selected_id()),
+			"proc_color": (ttf_dialog.get_node(g + "ProcColorPicker") as ColorPickerButton).color,
+		}
+		_save_ttf_import_settings(opts)
+		ttf_dialog.hide()
+		_import_ttf(_ttf_font_path, opts)
+	)
 
 func _refresh_preview() -> void:
 	if preview_edit == null:
@@ -1006,84 +973,51 @@ func _on_import_ttf() -> void:
 	dlg.popup_centered_ratio(0.7)
 
 func _show_ttf_options(font_path: String) -> void:
+	_ttf_font_path = font_path
 	var saved := _load_ttf_import_settings()
-	var d := AcceptDialog.new()
-	d.title = "Import TTF/OTF"
-	d.dialog_hide_on_ok = false
-
-	var scroll := ScrollContainer.new()
-	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	d.add_child(scroll)
-
-	var vb := VBoxContainer.new()
-	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	vb.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.add_child(vb)
-
-	var grid := GridContainer.new(); grid.columns = 2; vb.add_child(grid)
-	grid.add_child(_lbl("Size")); var sz := SpinBox.new(); sz.min_value = 6; sz.max_value = 128; sz.value = int(saved.get("size", 16)); sz.step = 1; grid.add_child(sz)
-	grid.add_child(_lbl("Filter")); var filt := OptionButton.new(); filt.add_item("Nearest (pixel)", 0); filt.add_item("Linear (smooth)", 1); filt.select(clampi(int(saved.get("filter", 0)), 0, 1)); grid.add_child(filt)
-	grid.add_child(_lbl("Padding (px)")); var pad_sz := SpinBox.new(); pad_sz.min_value = 0; pad_sz.max_value = 32; pad_sz.value = int(saved.get("padding", 0)); pad_sz.step = 1; pad_sz.tooltip_text = "Atlas gap between packed glyphs (0 disables)"; grid.add_child(pad_sz)
-	grid.add_child(_lbl("Atlas tiebreaker")); var tie_dir := OptionButton.new(); tie_dir.add_item("Prefer wide", 0); tie_dir.add_item("Prefer tall", 1); tie_dir.select(clampi(int(saved.get("pack_tiebreaker", 0)), 0, 1)); tie_dir.tooltip_text = "When atlas size candidates tie, prefer landscape (wide) or portrait (tall)"; grid.add_child(tie_dir)
-	grid.add_child(_lbl("Outline (px)")); var outline_sz := SpinBox.new(); outline_sz.min_value = 0; outline_sz.max_value = 8; outline_sz.value = int(saved.get("outline", 0)); outline_sz.step = 1; grid.add_child(outline_sz)
-	grid.add_child(_lbl("Outline color")); var outline_col := ColorPickerButton.new(); outline_col.color = saved.get("outline_color", Color.BLACK); outline_col.custom_minimum_size = Vector2(120, 0); grid.add_child(outline_col)
-	grid.add_child(_lbl("Fill")); var fill_mode := OptionButton.new(); fill_mode.add_item("Solid", 0); fill_mode.add_item("Gradient", 1); fill_mode.add_item("Procedural", 2); fill_mode.select(clampi(int(saved.get("fill_mode", 0)), 0, 2)); grid.add_child(fill_mode)
-	grid.add_child(_lbl("Gradient")); var grad_dir := OptionButton.new(); grad_dir.add_item("Vertical (top-bottom)", 1); grad_dir.add_item("Horizontal (left-right)", 2); grad_dir.add_item("Diagonal (TL-BR)", 3); grad_dir.add_item("Diagonal (TR-BL)", 4); grad_dir.select(clampi(int(saved.get("gradient_dir", 1)) - 1, 0, 3)); grid.add_child(grad_dir)
-	grid.add_child(_lbl("Gradient from")); var grad_c1 := ColorPickerButton.new(); grad_c1.color = saved.get("gradient_color1", Color.WHITE); grad_c1.custom_minimum_size = Vector2(120, 0); grid.add_child(grad_c1)
-	grid.add_child(_lbl("Gradient to")); var grad_c2 := ColorPickerButton.new(); grad_c2.color = saved.get("gradient_color2", Color(0.7, 0.85, 1.0, 1.0)); grad_c2.custom_minimum_size = Vector2(120, 0); grid.add_child(grad_c2)
-	grid.add_child(_lbl("Procedural effect")); var proc_effect := OptionButton.new(); proc_effect.add_item("Scanlines", 0); proc_effect.add_item("Bayer dither", 1); proc_effect.add_item("Checker", 2); proc_effect.add_item("Noise grain", 3); proc_effect.add_item("Edge tint / bevel", 4); proc_effect.select(clampi(int(saved.get("proc_effect", 0)), 0, 4)); grid.add_child(proc_effect)
-	grid.add_child(_lbl("Procedural color")); var proc_color := ColorPickerButton.new(); proc_color.color = saved.get("proc_color", Color.WHITE); proc_color.custom_minimum_size = Vector2(120, 0); grid.add_child(proc_color)
-	grid.add_child(_lbl("Charset")); var chars := TextEdit.new(); chars.text = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"; chars.custom_minimum_size = Vector2(420, 80); chars.size_flags_vertical = Control.SIZE_FILL; chars.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY; grid.add_child(chars)
-
-	var info := Label.new(); info.text = "Rasterizes glyphs into a new bitmap atlas. Filter affects preview/texture sampling; outline, gradient, and procedural effects are baked into the atlas (tinting visible glyph pixels). Settings are remembered for next time."; info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; vb.add_child(info)
-
-	var reset_btn := d.add_button("Reset", false, "reset")
-	reset_btn.pressed.connect(func():
-		var defaults := _default_ttf_import_settings()
-		sz.value = int(defaults.get("size", 16))
-		filt.select(clampi(int(defaults.get("filter", 0)), 0, 1))
-		pad_sz.value = int(defaults.get("padding", 0))
-		tie_dir.select(clampi(int(defaults.get("pack_tiebreaker", 0)), 0, 1))
-		outline_sz.value = int(defaults.get("outline", 0))
-		outline_col.color = defaults.get("outline_color", Color.BLACK)
-		fill_mode.select(clampi(int(defaults.get("fill_mode", 0)), 0, 3))
-		grad_dir.select(clampi(int(defaults.get("gradient_dir", 1)) - 1, 0, 3))
-		grad_c1.color = defaults.get("gradient_color1", Color.WHITE)
-		grad_c2.color = defaults.get("gradient_color2", Color(0.7, 0.85, 1.0, 1.0))
-		proc_effect.select(clampi(int(defaults.get("proc_effect", 0)), 0, 4))
-		proc_color.color = defaults.get("proc_color", Color.WHITE)
-	)
-
-	add_child(d)
-	d.confirmed.connect(func():
-		var opts := {
-			"size": int(sz.value),
-			"charset": chars.text,
-			"filter": int(filt.get_selected_id()),
-			"padding": int(pad_sz.value),
-			"pack_tiebreaker": int(tie_dir.get_selected_id()),
-			"outline": int(outline_sz.value),
-			"outline_color": outline_col.color,
-			"fill_mode": int(fill_mode.get_selected_id()),
-			"gradient_dir": int(grad_dir.get_selected_id()),
-			"gradient_color1": grad_c1.color,
-			"gradient_color2": grad_c2.color,
-			"proc_effect": int(proc_effect.get_selected_id()),
-			"proc_color": proc_color.color,
-		}
-		_save_ttf_import_settings(opts)
-		d.queue_free()
-		_import_ttf(font_path, opts)
-	)
-	d.canceled.connect(func(): d.queue_free())
-
+	_populate_ttf_dialog(saved)
 	var vp_size := get_viewport_rect().size
 	var target_w := mini(700, int(vp_size.x * 0.92))
 	var target_h := mini(700, int(vp_size.y * 0.92))
-	d.popup_centered(Vector2i(maxi(target_w, 360), maxi(target_h, 320)))
+	ttf_dialog.popup_centered(Vector2i(maxi(target_w, 360), maxi(target_h, 320)))
+
+func _populate_ttf_dialog(saved: Dictionary) -> void:
+	var g := "Scroll/VBox/Grid/"
+	(ttf_dialog.get_node(g + "SizeSpin") as SpinBox).value = int(saved.get("size", 16))
+	var filt := ttf_dialog.get_node(g + "FilterOption") as OptionButton
+	filt.select(clampi(int(saved.get("filter", 0)), 0, 1))
+	(ttf_dialog.get_node(g + "PaddingSpin") as SpinBox).value = int(saved.get("padding", 0))
+	var tie := ttf_dialog.get_node(g + "TieOption") as OptionButton
+	tie.select(clampi(int(saved.get("pack_tiebreaker", 0)), 0, 1))
+	(ttf_dialog.get_node(g + "OutlineSpin") as SpinBox).value = int(saved.get("outline", 0))
+	(ttf_dialog.get_node(g + "OutlineColorPicker") as ColorPickerButton).color = saved.get("outline_color", Color.BLACK)
+	var fill := ttf_dialog.get_node(g + "FillOption") as OptionButton
+	fill.select(clampi(int(saved.get("fill_mode", 0)), 0, 2))
+	var grad := ttf_dialog.get_node(g + "GradientOption") as OptionButton
+	grad.select(clampi(int(saved.get("gradient_dir", 1)) - 1, 0, 3))
+	(ttf_dialog.get_node(g + "GradFromPicker") as ColorPickerButton).color = saved.get("gradient_color1", Color.WHITE)
+	(ttf_dialog.get_node(g + "GradToPicker") as ColorPickerButton).color = saved.get("gradient_color2", Color(0.7, 0.85, 1.0, 1.0))
+	var proc := ttf_dialog.get_node(g + "ProcEffectOption") as OptionButton
+	proc.select(clampi(int(saved.get("proc_effect", 0)), 0, 4))
+	(ttf_dialog.get_node(g + "ProcColorPicker") as ColorPickerButton).color = saved.get("proc_color", Color.WHITE)
+	(ttf_dialog.get_node(g + "CharsetEdit") as TextEdit).text = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+
+func _reset_ttf_dialog() -> void:
+	var defaults := _default_ttf_import_settings()
+	# apply defaults for colors etc already in defaults
+	var g := "Scroll/VBox/Grid/"
+	(ttf_dialog.get_node(g + "SizeSpin") as SpinBox).value = int(defaults.get("size", 16))
+	(ttf_dialog.get_node(g + "FilterOption") as OptionButton).select(clampi(int(defaults.get("filter", 0)), 0, 1))
+	(ttf_dialog.get_node(g + "PaddingSpin") as SpinBox).value = int(defaults.get("padding", 0))
+	(ttf_dialog.get_node(g + "TieOption") as OptionButton).select(clampi(int(defaults.get("pack_tiebreaker", 0)), 0, 1))
+	(ttf_dialog.get_node(g + "OutlineSpin") as SpinBox).value = int(defaults.get("outline", 0))
+	(ttf_dialog.get_node(g + "OutlineColorPicker") as ColorPickerButton).color = defaults.get("outline_color", Color.BLACK)
+	(ttf_dialog.get_node(g + "FillOption") as OptionButton).select(clampi(int(defaults.get("fill_mode", 0)), 0, 2))
+	(ttf_dialog.get_node(g + "GradientOption") as OptionButton).select(clampi(int(defaults.get("gradient_dir", 1)) - 1, 0, 3))
+	(ttf_dialog.get_node(g + "GradFromPicker") as ColorPickerButton).color = defaults.get("gradient_color1", Color.WHITE)
+	(ttf_dialog.get_node(g + "GradToPicker") as ColorPickerButton).color = defaults.get("gradient_color2", Color(0.7, 0.85, 1.0, 1.0))
+	(ttf_dialog.get_node(g + "ProcEffectOption") as OptionButton).select(clampi(int(defaults.get("proc_effect", 0)), 0, 4))
+	(ttf_dialog.get_node(g + "ProcColorPicker") as ColorPickerButton).color = defaults.get("proc_color", Color.WHITE)
 
 func _import_ttf(font_path: String, opts: Dictionary) -> void:
 	var font_size: int = int(opts.get("size", 16))
@@ -1416,28 +1350,9 @@ func _try_pack_ttf(glyphs: Array, W: int, H: int, pad: int) -> Array:
 func _on_probe_fonts() -> void:
 	var report := _probe_fonts_report()
 	_set_status("Font probe complete - see diagnostics dialog", report.has("had_error") and bool(report.had_error))
-	var d := AcceptDialog.new()
-	d.title = "Font Probe Diagnostics"
-	d.dialog_hide_on_ok = true
-	var vb := VBoxContainer.new()
-	vb.custom_minimum_size = Vector2(820, 520)
-	d.add_child(vb)
-	var info := Label.new()
-	info.text = "Diagnostics for bundled .fnt loading (helps debug web/export issues like err 12 = ERR_FILE_CANT_OPEN)."
-	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	vb.add_child(info)
-	var out := RichTextLabel.new()
-	out.bbcode_enabled = false
-	out.selection_enabled = true
-	out.scroll_following = false
-	out.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	out.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var out := probe_dialog.get_node("VBox/Output") as RichTextLabel
 	out.text = str(report.get("text", ""))
-	vb.add_child(out)
-	add_child(d)
-	d.canceled.connect(func(): d.queue_free())
-	d.confirmed.connect(func(): d.queue_free())
-	d.popup_centered(Vector2i(900, 620))
+	probe_dialog.popup_centered(Vector2i(900, 620))
 
 func _probe_fonts_report() -> Dictionary:
 	var lines: PackedStringArray = []

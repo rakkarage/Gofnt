@@ -1,11 +1,534 @@
 [gd_scene format=3 uid="uid://dq7ganp23k30e"]
 
-[ext_resource type="Script" uid="uid://ci23ybeyqwbpu" path="res://font_editor.gd" id="1"]
+[ext_resource type="Script" uid="uid://ci23ybeyqwbpu" path="res://font_editor.gd" id="1_66v0l"]
+[ext_resource type="Script" uid="uid://ukdsevt6ri0t" path="res://atlas_view.gd" id="2_wuqaj"]
 
-[node name="Gofnt" type="PanelContainer" unique_id=484314587]
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_66v0l"]
+content_margin_left = 0.0
+content_margin_top = 0.0
+content_margin_right = 0.0
+content_margin_bottom = 0.0
+bg_color = Color(0.1105, 0.11750001, 0.1315, 0.74)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.45, 0.72, 1, 0.18)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+corner_detail = 5
+
+[node name="Gofnt" type="PanelContainer" unique_id=1027870048]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-script = ExtResource("1")
+theme_override_styles/panel = SubResource("StyleBoxFlat_66v0l")
+script = ExtResource("1_66v0l")
+
+[node name="Main" type="HBoxContainer" parent="." unique_id=465903012]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="Left" type="VBoxContainer" parent="Main" unique_id=1659183911]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 3.0
+
+[node name="Toolbar" type="HFlowContainer" parent="Main/Left" unique_id=705789613]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="OpenBtn" type="Button" parent="Main/Left/Toolbar" unique_id=697674023]
+layout_mode = 2
+tooltip_text = "Load a BMFont .fnt (text/XML) and its atlas PNG"
+text = "Open .fnt"
+
+[node name="ImportImageBtn" type="Button" parent="Main/Left/Toolbar" unique_id=21664262]
+layout_mode = 2
+tooltip_text = "Import a PNG and auto-detect glyph regions (creates a new font)"
+text = "Import Image"
+
+[node name="ImportTtfBtn" type="Button" parent="Main/Left/Toolbar" unique_id=791277077]
+layout_mode = 2
+tooltip_text = "Generate a bitmap font atlas from a TTF/OTF at a chosen size (basic rasterization)"
+text = "Import TTF/OTF"
+
+[node name="SaveFntBtn" type="Button" parent="Main/Left/Toolbar" unique_id=2133824506]
+layout_mode = 2
+tooltip_text = "Save BMFont data to the loaded .fnt path"
+text = "Save .fnt"
+
+[node name="SavePngBtn" type="Button" parent="Main/Left/Toolbar" unique_id=1196718257]
+layout_mode = 2
+tooltip_text = "Save atlas image to the loaded PNG path"
+text = "Save PNG"
+
+[node name="VSep1" type="VSeparator" parent="Main/Left/Toolbar" unique_id=1355346282]
+layout_mode = 2
+
+[node name="TrimSelectedBtn" type="Button" parent="Main/Left/Toolbar" unique_id=1687167368]
+layout_mode = 2
+tooltip_text = "Trim selected glyph rect to non-transparent bounds"
+text = "Trim selected"
+
+[node name="TrimAllBtn" type="Button" parent="Main/Left/Toolbar" unique_id=1513690821]
+layout_mode = 2
+tooltip_text = "Trim all glyph rects to non-transparent bounds (does not detect new glyphs)"
+text = "Trim all"
+
+[node name="RepackBtn" type="Button" parent="Main/Left/Toolbar" unique_id=66703233]
+layout_mode = 2
+tooltip_text = "Shelf-pack glyphs into a tighter power-of-two atlas"
+text = "Repack"
+
+[node name="VSep2" type="VSeparator" parent="Main/Left/Toolbar" unique_id=1347739661]
+layout_mode = 2
+
+[node name="FullscreenCb" type="CheckBox" parent="Main/Left/Toolbar" unique_id=1213287436]
+layout_mode = 2
+tooltip_text = "Toggle fullscreen window mode (persisted across runs)"
+disabled = true
+text = "Fullscreen (F11)"
+
+[node name="StatusLbl" type="Label" parent="Main/Left" unique_id=754669334]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.74039996, 0.8432, 0.9648, 0.9296)
+text = "Drop-ready: use Open .fnt to load a bitmap font (text BMFont) and its atlas PNG.  Toggle Fullscreen with F11 or the checkbox."
+clip_text = true
+
+[node name="Atlas" type="Control" parent="Main/Left" unique_id=655105501]
+custom_minimum_size = Vector2(400, 300)
+clip_contents = true
+layout_mode = 2
+size_flags_vertical = 3
+size_flags_stretch_ratio = 3.0
+focus_mode = 2
+script = ExtResource("2_wuqaj")
+
+[node name="PreviewLbl" type="Label" parent="Main/Left" unique_id=874518703]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.72, 0.84, 1, 1)
+text = "Live preview"
+
+[node name="PreviewEdit" type="TextEdit" parent="Main/Left" unique_id=791373931]
+custom_minimum_size = Vector2(0, 160)
+layout_mode = 2
+size_flags_vertical = 3
+text = "The quick brown fox jumps over the lazy dog.
+0123456789 !?@#$%"
+
+[node name="Tabs" type="TabContainer" parent="Main" unique_id=1040893006]
+layout_mode = 2
+size_flags_horizontal = 3
+current_tab = 0
+tab_1/title = "Font/Stats"
+
+[node name="Glyph" type="VBoxContainer" parent="Main/Tabs" unique_id=2078715098]
+layout_mode = 2
+metadata/_tab_index = 0
+
+[node name="GlyphList" type="ItemList" parent="Main/Tabs/Glyph" unique_id=2122367414]
+custom_minimum_size = Vector2(0, 180)
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="AddRow" type="HBoxContainer" parent="Main/Tabs/Glyph" unique_id=1970395927]
+layout_mode = 2
+
+[node name="GlyphJumpEdit" type="LineEdit" parent="Main/Tabs/Glyph/AddRow" unique_id=719475583]
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "Enter char or id (e.g. A or 65)"
+
+[node name="AddGoBtn" type="Button" parent="Main/Tabs/Glyph/AddRow" unique_id=1512587772]
+layout_mode = 2
+tooltip_text = "Create (if missing) and select glyph for the given character or numeric id"
+text = "Add / Go"
+
+[node name="GlyphActionBtn" type="Button" parent="Main/Tabs/Glyph" unique_id=2132083186]
+layout_mode = 2
+tooltip_text = "Create or delete the selected glyph entry"
+disabled = true
+text = "Create glyph"
+
+[node name="PropsGrid" type="GridContainer" parent="Main/Tabs/Glyph" unique_id=85503905]
+layout_mode = 2
+columns = 2
+
+[node name="PropLabelX" type="Label" parent="Main/Tabs/Glyph/PropsGrid" unique_id=916434433]
+layout_mode = 2
+text = "x"
+
+[node name="PropSpinX" type="SpinBox" parent="Main/Tabs/Glyph/PropsGrid" unique_id=1145778240]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = -4096.0
+max_value = 4096.0
+allow_greater = true
+allow_lesser = true
+
+[node name="PropLabelY" type="Label" parent="Main/Tabs/Glyph/PropsGrid" unique_id=560483233]
+layout_mode = 2
+text = "y"
+
+[node name="PropSpinY" type="SpinBox" parent="Main/Tabs/Glyph/PropsGrid" unique_id=1220128711]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = -4096.0
+max_value = 4096.0
+allow_greater = true
+allow_lesser = true
+
+[node name="PropLabelWidth" type="Label" parent="Main/Tabs/Glyph/PropsGrid" unique_id=731650445]
+layout_mode = 2
+text = "width"
+
+[node name="PropSpinWidth" type="SpinBox" parent="Main/Tabs/Glyph/PropsGrid" unique_id=1176541415]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = -4096.0
+max_value = 4096.0
+allow_greater = true
+allow_lesser = true
+
+[node name="PropLabelHeight" type="Label" parent="Main/Tabs/Glyph/PropsGrid" unique_id=1205079353]
+layout_mode = 2
+text = "height"
+
+[node name="PropSpinHeight" type="SpinBox" parent="Main/Tabs/Glyph/PropsGrid" unique_id=80069191]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = -4096.0
+max_value = 4096.0
+allow_greater = true
+allow_lesser = true
+
+[node name="PropLabelXoffset" type="Label" parent="Main/Tabs/Glyph/PropsGrid" unique_id=1344175644]
+layout_mode = 2
+text = "xoffset"
+
+[node name="PropSpinXoffset" type="SpinBox" parent="Main/Tabs/Glyph/PropsGrid" unique_id=1094127280]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = -4096.0
+max_value = 4096.0
+allow_greater = true
+allow_lesser = true
+
+[node name="PropLabelYoffset" type="Label" parent="Main/Tabs/Glyph/PropsGrid" unique_id=1144195753]
+layout_mode = 2
+text = "yoffset"
+
+[node name="PropSpinYoffset" type="SpinBox" parent="Main/Tabs/Glyph/PropsGrid" unique_id=1174402864]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = -4096.0
+max_value = 4096.0
+allow_greater = true
+allow_lesser = true
+
+[node name="PropLabelXadvance" type="Label" parent="Main/Tabs/Glyph/PropsGrid" unique_id=224659282]
+layout_mode = 2
+text = "xadvance"
+
+[node name="PropSpinXadvance" type="SpinBox" parent="Main/Tabs/Glyph/PropsGrid" unique_id=1533090143]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = -4096.0
+max_value = 4096.0
+allow_greater = true
+allow_lesser = true
+
+[node name="FontStats" type="VBoxContainer" parent="Main/Tabs" unique_id=131193242]
+visible = false
+layout_mode = 2
+metadata/_tab_index = 1
+metadata/_tab_name = "Font/Stats"
+
+[node name="FontGrid" type="GridContainer" parent="Main/Tabs/FontStats" unique_id=1244043170]
+layout_mode = 2
+columns = 2
+
+[node name="LineHeightLabel" type="Label" parent="Main/Tabs/FontStats/FontGrid" unique_id=1935838637]
+layout_mode = 2
+text = "lineHeight"
+
+[node name="FontLineH" type="SpinBox" parent="Main/Tabs/FontStats/FontGrid" unique_id=2037212751]
+layout_mode = 2
+size_flags_horizontal = 3
+max_value = 4096.0
+
+[node name="BaseLabel" type="Label" parent="Main/Tabs/FontStats/FontGrid" unique_id=469539421]
+layout_mode = 2
+text = "base"
+
+[node name="FontBase" type="SpinBox" parent="Main/Tabs/FontStats/FontGrid" unique_id=657481425]
+layout_mode = 2
+size_flags_horizontal = 3
+max_value = 4096.0
+
+[node name="BulkRow" type="HBoxContainer" parent="Main/Tabs/FontStats" unique_id=893146082]
+layout_mode = 2
+
+[node name="BulkLabel" type="Label" parent="Main/Tabs/FontStats/BulkRow" unique_id=1346490604]
+layout_mode = 2
+text = "All xadvance +"
+
+[node name="BulkSpin" type="SpinBox" parent="Main/Tabs/FontStats/BulkRow" unique_id=972942043]
+layout_mode = 2
+min_value = -999.0
+max_value = 999.0
+
+[node name="BulkApplyBtn" type="Button" parent="Main/Tabs/FontStats/BulkRow" unique_id=1854206798]
+layout_mode = 2
+text = "Apply"
+
+[node name="StatsTitle" type="Label" parent="Main/Tabs/FontStats" unique_id=326380814]
+layout_mode = 2
+text = "Stats & details"
+
+[node name="StatsLbl" type="RichTextLabel" parent="Main/Tabs/FontStats" unique_id=1063743970]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_colors/default_color = Color(0.9, 0.93, 0.98, 0.95)
+bbcode_enabled = true
+fit_content = true
+
+[node name="Kerning" type="VBoxContainer" parent="Main/Tabs" unique_id=714942210]
+visible = false
+layout_mode = 2
+metadata/_tab_index = 2
+
+[node name="KernTitle" type="Label" parent="Main/Tabs/Kerning" unique_id=1154569661]
+layout_mode = 2
+text = "Kerning pairs"
+
+[node name="KernList" type="ItemList" parent="Main/Tabs/Kerning" unique_id=1769379413]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="KernRow" type="HBoxContainer" parent="Main/Tabs/Kerning" unique_id=1952360003]
+layout_mode = 2
+
+[node name="KernFirstEdit" type="LineEdit" parent="Main/Tabs/Kerning/KernRow" unique_id=1886591009]
+custom_minimum_size = Vector2(60, 0)
+layout_mode = 2
+placeholder_text = "first char"
+
+[node name="KernSecondEdit" type="LineEdit" parent="Main/Tabs/Kerning/KernRow" unique_id=819183528]
+custom_minimum_size = Vector2(60, 0)
+layout_mode = 2
+placeholder_text = "second"
+
+[node name="KernAmountSpin" type="SpinBox" parent="Main/Tabs/Kerning/KernRow" unique_id=1400824490]
+layout_mode = 2
+min_value = -200.0
+max_value = 200.0
+
+[node name="KernAddBtn" type="Button" parent="Main/Tabs/Kerning/KernRow" unique_id=41302679]
+layout_mode = 2
+text = "Add/Set"
+
+[node name="KernRemoveBtn" type="Button" parent="Main/Tabs/Kerning" unique_id=68955768]
+layout_mode = 2
+text = "Remove sel"
+
+[node name="TtfDialog" type="AcceptDialog" parent="." unique_id=596652813]
+title = "Import TTF/OTF"
+dialog_hide_on_ok = false
+
+[node name="Scroll" type="ScrollContainer" parent="TtfDialog" unique_id=1843036406]
+size_flags_horizontal = 3
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="VBox" type="VBoxContainer" parent="TtfDialog/Scroll" unique_id=1739818237]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="Grid" type="GridContainer" parent="TtfDialog/Scroll/VBox" unique_id=1416180853]
+layout_mode = 2
+columns = 2
+
+[node name="SizeLabel" type="Label" parent="TtfDialog/Scroll/VBox/Grid" unique_id=1705671464]
+layout_mode = 2
+text = "Size"
+
+[node name="SizeSpin" type="SpinBox" parent="TtfDialog/Scroll/VBox/Grid" unique_id=1854100227]
+layout_mode = 2
+min_value = 6.0
+max_value = 128.0
+value = 16.0
+
+[node name="FilterLabel" type="Label" parent="TtfDialog/Scroll/VBox/Grid" unique_id=1262653240]
+layout_mode = 2
+text = "Filter"
+
+[node name="FilterOption" type="OptionButton" parent="TtfDialog/Scroll/VBox/Grid" unique_id=999909260]
+layout_mode = 2
+selected = 0
+item_count = 2
+popup/item_0/text = "Nearest (pixel)"
+popup/item_0/id = 0
+popup/item_1/text = "Linear (smooth)"
+popup/item_1/id = 1
+
+[node name="PaddingLabel" type="Label" parent="TtfDialog/Scroll/VBox/Grid" unique_id=296044283]
+layout_mode = 2
+text = "Padding (px)"
+
+[node name="PaddingSpin" type="SpinBox" parent="TtfDialog/Scroll/VBox/Grid" unique_id=818738266]
+layout_mode = 2
+tooltip_text = "Atlas gap between packed glyphs (0 disables)"
+max_value = 32.0
+
+[node name="TieLabel" type="Label" parent="TtfDialog/Scroll/VBox/Grid" unique_id=1160782290]
+layout_mode = 2
+text = "Atlas tiebreaker"
+
+[node name="TieOption" type="OptionButton" parent="TtfDialog/Scroll/VBox/Grid" unique_id=274454078]
+layout_mode = 2
+selected = 0
+item_count = 2
+popup/item_0/text = "Prefer wide"
+popup/item_0/id = 0
+popup/item_1/text = "Prefer tall"
+popup/item_1/id = 1
+
+[node name="OutlineLabel" type="Label" parent="TtfDialog/Scroll/VBox/Grid" unique_id=697249002]
+layout_mode = 2
+text = "Outline (px)"
+
+[node name="OutlineSpin" type="SpinBox" parent="TtfDialog/Scroll/VBox/Grid" unique_id=828982366]
+layout_mode = 2
+max_value = 8.0
+
+[node name="OutlineColorLabel" type="Label" parent="TtfDialog/Scroll/VBox/Grid" unique_id=1482539991]
+layout_mode = 2
+text = "Outline color"
+
+[node name="OutlineColorPicker" type="ColorPickerButton" parent="TtfDialog/Scroll/VBox/Grid" unique_id=96838815]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+
+[node name="FillLabel" type="Label" parent="TtfDialog/Scroll/VBox/Grid" unique_id=1803906800]
+layout_mode = 2
+text = "Fill"
+
+[node name="FillOption" type="OptionButton" parent="TtfDialog/Scroll/VBox/Grid" unique_id=1630650027]
+layout_mode = 2
+selected = 0
+item_count = 3
+popup/item_0/text = "Solid"
+popup/item_0/id = 0
+popup/item_1/text = "Gradient"
+popup/item_1/id = 1
+popup/item_2/text = "Procedural"
+popup/item_2/id = 2
+
+[node name="GradientLabel" type="Label" parent="TtfDialog/Scroll/VBox/Grid" unique_id=1879690312]
+layout_mode = 2
+text = "Gradient"
+
+[node name="GradientOption" type="OptionButton" parent="TtfDialog/Scroll/VBox/Grid" unique_id=1645035925]
+layout_mode = 2
+selected = 0
+item_count = 4
+popup/item_0/text = "Vertical (top-bottom)"
+popup/item_0/id = 1
+popup/item_1/text = "Horizontal (left-right)"
+popup/item_1/id = 2
+popup/item_2/text = "Diagonal (TL-BR)"
+popup/item_2/id = 3
+popup/item_3/text = "Diagonal (TR-BL)"
+popup/item_3/id = 4
+
+[node name="GradFromLabel" type="Label" parent="TtfDialog/Scroll/VBox/Grid" unique_id=800652804]
+layout_mode = 2
+text = "Gradient from"
+
+[node name="GradFromPicker" type="ColorPickerButton" parent="TtfDialog/Scroll/VBox/Grid" unique_id=315772624]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+color = Color(1, 1, 1, 1)
+
+[node name="GradToLabel" type="Label" parent="TtfDialog/Scroll/VBox/Grid" unique_id=1458172515]
+layout_mode = 2
+text = "Gradient to"
+
+[node name="GradToPicker" type="ColorPickerButton" parent="TtfDialog/Scroll/VBox/Grid" unique_id=1986546404]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+color = Color(0.7, 0.85, 1, 1)
+
+[node name="ProcEffectLabel" type="Label" parent="TtfDialog/Scroll/VBox/Grid" unique_id=1347823264]
+layout_mode = 2
+text = "Procedural effect"
+
+[node name="ProcEffectOption" type="OptionButton" parent="TtfDialog/Scroll/VBox/Grid" unique_id=1688003437]
+layout_mode = 2
+selected = 0
+item_count = 5
+popup/item_0/text = "Scanlines"
+popup/item_0/id = 0
+popup/item_1/text = "Bayer dither"
+popup/item_1/id = 1
+popup/item_2/text = "Checker"
+popup/item_2/id = 2
+popup/item_3/text = "Noise grain"
+popup/item_3/id = 3
+popup/item_4/text = "Edge tint / bevel"
+popup/item_4/id = 4
+
+[node name="ProcColorLabel" type="Label" parent="TtfDialog/Scroll/VBox/Grid" unique_id=122642782]
+layout_mode = 2
+text = "Procedural color"
+
+[node name="ProcColorPicker" type="ColorPickerButton" parent="TtfDialog/Scroll/VBox/Grid" unique_id=1577165104]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+color = Color(1, 1, 1, 1)
+
+[node name="CharsetLabel" type="Label" parent="TtfDialog/Scroll/VBox/Grid" unique_id=2005267676]
+layout_mode = 2
+text = "Charset"
+
+[node name="CharsetEdit" type="TextEdit" parent="TtfDialog/Scroll/VBox/Grid" unique_id=637876446]
+custom_minimum_size = Vector2(420, 80)
+layout_mode = 2
+text = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+wrap_mode = 1
+
+[node name="InfoLabel" type="Label" parent="TtfDialog/Scroll/VBox" unique_id=1355686895]
+layout_mode = 2
+text = "Rasterizes glyphs into a new bitmap atlas. Filter affects preview/texture sampling; outline, gradient, and procedural effects are baked into the atlas (tinting visible glyph pixels). Settings are remembered for next time."
+autowrap_mode = 3
+
+[node name="ResetBtn" type="Button" parent="TtfDialog/Scroll/VBox" unique_id=180755659]
+layout_mode = 2
+text = "Reset"
+
+[node name="ProbeDialog" type="AcceptDialog" parent="." unique_id=1292243678]
+title = "Font Probe Diagnostics"
+
+[node name="VBox" type="VBoxContainer" parent="ProbeDialog" unique_id=223792306]
+custom_minimum_size = Vector2(820, 520)
+
+[node name="InfoLabel" type="Label" parent="ProbeDialog/VBox" unique_id=519255656]
+layout_mode = 2
+text = "Diagnostics for bundled .fnt loading (helps debug web/export issues like err 12 = ERR_FILE_CANT_OPEN)."
+autowrap_mode = 3
+
+[node name="Output" type="RichTextLabel" parent="ProbeDialog/VBox" unique_id=993879263]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+focus_mode = 2
+selection_enabled = true
