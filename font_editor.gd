@@ -14,7 +14,6 @@ var glyph_list: ItemList
 var glyph_jump_edit: LineEdit
 var status_lbl: Label
 var preview_edit: TextEdit
-var preview_canvas: Control
 var stats_lbl: RichTextLabel
 var load_demo_lbl: Label
 var apply_demo_lbl: Label
@@ -50,9 +49,7 @@ func _apply_project_default_theme() -> void:
 		theme = load(def_path)
 	elif ResourceLoader.exists("res://theme/venice16_x1.tres"):
 		theme = load("res://theme/venice16_x1.tres")
-	preview_scale = 1.0
-	if preview_canvas:
-		preview_canvas.queue_redraw()
+	_refresh_preview()
 
 func _unhandled_input(event: InputEvent) -> void:
 	# Never toggle window mode from within the Godot editor (tool mode): it would
@@ -299,15 +296,11 @@ func _build_ui() -> void:
 	left.add_child(preview_lbl)
 	preview_edit = TextEdit.new()
 	preview_edit.text = "The quick brown fox jumps over the lazy dog.\n0123456789 !?@#$%"
-	preview_edit.custom_minimum_size = Vector2(0, 80)
+	preview_edit.custom_minimum_size = Vector2(0, 160)
+	preview_edit.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	preview_edit.scroll_fit_content_height = false
-	preview_edit.text_changed.connect(func(): preview_canvas.queue_redraw())
+	preview_edit.text_changed.connect(func(): pass )
 	left.add_child(preview_edit)
-	preview_canvas = Control.new()
-	preview_canvas.custom_minimum_size = Vector2(0, 120)
-	preview_canvas.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	preview_canvas.draw.connect(_draw_preview)
-	left.add_child(preview_canvas)
 
 	# Right: tabs
 	var tabs := TabContainer.new()
@@ -343,14 +336,12 @@ func _build_glyph_tab() -> Control:
 		s.value_changed.connect(func(v): _on_prop_changed(key, int(v)))
 		grid.add_child(s)
 		prop_spin[key] = s
-	var hint := Label.new(); hint.text = "Tip: select a (missing) entry to create it (gets a default rect). Set x/y/width/height in properties or drag/resize it in the atlas. Mouse wheel zooms, middle-drag pans."; hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	vb.add_child(hint)
 	return vb
 
 func _build_font_tab() -> Control:
 	var vb := VBoxContainer.new()
 	var g := GridContainer.new(); g.columns = 2; vb.add_child(g)
-	g.add_child(_lbl("lineHeight")); font_line_h = SpinBox.new(); font_line_h.max_value = 4096; font_line_h.value_changed.connect(func(v): if not _updating_ui: data.common["lineHeight"] = int(v); preview_canvas.queue_redraw()); font_line_h.size_flags_horizontal = Control.SIZE_EXPAND_FILL; g.add_child(font_line_h)
+	g.add_child(_lbl("lineHeight")); font_line_h = SpinBox.new(); font_line_h.max_value = 4096; font_line_h.value_changed.connect(func(v): if not _updating_ui: data.common["lineHeight"] = int(v); _refresh_preview()); font_line_h.size_flags_horizontal = Control.SIZE_EXPAND_FILL; g.add_child(font_line_h)
 	g.add_child(_lbl("base")); font_base = SpinBox.new(); font_base.max_value = 4096; font_base.value_changed.connect(func(v): if not _updating_ui: data.common["base"] = int(v)); font_base.size_flags_horizontal = Control.SIZE_EXPAND_FILL; g.add_child(font_base)
 	var bulk := HBoxContainer.new(); vb.add_child(bulk)
 	bulk.add_child(_lbl("All xadvance +")); var ba := SpinBox.new(); ba.min_value = -999; ba.max_value = 999; ba.value = 0; bulk.add_child(ba)
@@ -375,10 +366,69 @@ func _build_kern_tab() -> Control:
 func _lbl(t: String) -> Label:
 	var l := Label.new(); l.text = t; return l
 
+func _refresh_preview() -> void:
+	if preview_edit == null:
+		return
+	if data == null or data.image == null:
+		preview_edit.remove_theme_font_override("font")
+		preview_edit.remove_theme_font_size_override("font_size")
+		preview_edit.scale = Vector2(preview_scale, preview_scale)
+		return
+	# Build a scaled copy of the in-memory BMFont data so the editable preview
+	# reflects glyph edits live and honors preview_scale (e.g. 2x/4x).
+	var s := maxi(1, int(round(preview_scale)))
+	var preview_data := BMFontData.new()
+	preview_data.info = data.info.duplicate(true)
+	if preview_data.info.has("size"):
+		preview_data.info["size"] = int(preview_data.info.get("size", 16)) * s
+	preview_data.common = data.common.duplicate(true)
+	preview_data.pages = data.pages.duplicate(true)
+	preview_data.chars = {}
+	for id in data.chars.keys():
+		var c: Dictionary = (data.chars[id] as Dictionary).duplicate()
+		for key in ["x", "y", "width", "height", "xoffset", "yoffset", "xadvance"]:
+			c[key] = int(c.get(key, 0)) * s
+		preview_data.chars[id] = c
+	preview_data.kernings = []
+	for k in data.kernings:
+		var kk: Dictionary = (k as Dictionary).duplicate()
+		kk["amount"] = int(kk.get("amount", 0)) * s
+		preview_data.kernings.append(kk)
+	var img := data.image.duplicate()
+	if s > 1:
+		img.resize(img.get_width() * s, img.get_height() * s, Image.INTERPOLATE_NEAREST)
+	preview_data.image = img
+	preview_data.texture = ImageTexture.create_from_image(img)
+	preview_data.fnt_path = data.fnt_path
+	preview_data.image_path = data.image_path
+	preview_data.common["lineHeight"] = int(data.common.get("lineHeight", 16)) * s
+	preview_data.common["base"] = int(data.common.get("base", 12)) * s
+	preview_data.common["scaleW"] = img.get_width()
+	preview_data.common["scaleH"] = img.get_height()
+	if not preview_data.pages.is_empty():
+		preview_data.pages[0]["file"] = "gofnt_preview.png"
+
+	var tmp_fnt := "user://gofnt_preview.fnt"
+	var tmp_png := "user://gofnt_preview.png"
+	var old_fnt := preview_data.fnt_path
+	var old_img := preview_data.image_path
+	preview_data.fnt_path = tmp_fnt
+	preview_data.image_path = tmp_png
+	preview_data.save_fnt(tmp_fnt)
+	preview_data.save_png(tmp_png)
+	preview_data.fnt_path = old_fnt
+	preview_data.image_path = old_img
+
+	var ff := FontFile.new()
+	var p := ProjectSettings.globalize_path(tmp_fnt)
+	if ff.load_bitmap_font(p) == OK:
+		preview_edit.add_theme_font_override("font", ff)
+	preview_edit.scale = Vector2.ONE
+
 func _apply_texture_filter(filter_mode: int) -> void:
 	var tf := CanvasItem.TEXTURE_FILTER_NEAREST if filter_mode == 0 else CanvasItem.TEXTURE_FILTER_LINEAR
-	if preview_canvas:
-		preview_canvas.texture_filter = tf
+	if preview_edit:
+		preview_edit.texture_filter = tf
 	if atlas:
 		atlas.texture_filter = tf
 	# note: BMFont .fnt doesn't store Godot texture filter; this affects editor preview/atlas rendering.
@@ -405,7 +455,7 @@ func _load_font(path: String) -> void:
 	_refresh_glyph_list(); _refresh_kern(); _refresh_stats()
 	_apply_texture_filter(0)
 	_set_status("Loaded %s  |  %d glyphs" % [data.info.get("face", path.get_file()), data.chars.size()])
-	preview_canvas.queue_redraw(); atlas.queue_redraw()
+	_refresh_preview(); atlas.queue_redraw()
 
 func _refresh_glyph_list() -> void:
 	glyph_list.clear()
@@ -555,7 +605,7 @@ func _on_glyph_action() -> void:
 	else:
 		_ensure_glyph(sel_id)
 		_set_status("Created glyph %d" % sel_id)
-	_refresh_glyph_list(); _refresh_stats(); atlas.queue_redraw(); preview_canvas.queue_redraw()
+	_refresh_glyph_list(); _refresh_stats(); atlas.queue_redraw(); _refresh_preview()
 	_sync_props()
 	# reselect same id in list
 	for i in glyph_list.item_count:
@@ -565,48 +615,16 @@ func _on_glyph_action() -> void:
 func _on_prop_changed(key: String, val: int) -> void:
 	if _updating_ui or sel_id == -1 or not data.chars.has(sel_id): return
 	data.chars[sel_id][key] = val
-	atlas.queue_redraw(); preview_canvas.queue_redraw(); _refresh_stats()
+	atlas.queue_redraw(); _refresh_preview(); _refresh_stats()
 
 func _on_glyph_changed(_id: int) -> void:
-	_sync_props(); preview_canvas.queue_redraw(); _refresh_stats()
+	_sync_props(); _refresh_preview(); _refresh_stats()
 
 func _bulk_advance(delta: int) -> void:
 	if data == null: return
 	for id in data.chars.keys():
 		data.chars[id]["xadvance"] = int(data.chars[id].get("xadvance", 0)) + delta
-	_sync_props(); _refresh_glyph_list(); preview_canvas.queue_redraw(); _set_status("Applied xadvance %+d to all glyphs" % delta)
-
-func _draw_preview() -> void:
-	var c := preview_canvas
-	var bg := Color(0.18, 0.18, 0.2)
-	c.draw_rect(Rect2(Vector2.ZERO, c.size), bg)
-	if data == null or data.texture == null: return
-	var txt := preview_edit.text
-	var lh := int(data.common.get("lineHeight", 16))
-	var s := preview_scale
-	var margin := Vector2(8, 8)
-	var kern := {}
-	for k in data.kernings:
-		kern[Vector2i(int(k.get("first", 0)), int(k.get("second", 0)))] = int(k.get("amount", 0))
-	var pen := margin
-	var prev := -1
-	for i in txt.length():
-		var code := txt.unicode_at(i)
-		if code == 10:
-			pen.x = margin.x; pen.y += lh * s; prev = -1; continue
-		var g: Dictionary = data.chars.get(code, data.chars.get(63, {}))
-		if g.is_empty(): prev = code; continue
-		if prev != -1:
-			pen.x += int(kern.get(Vector2i(prev, code), 0)) * s
-		var gw := int(g.get("width", 0)); var gh := int(g.get("height", 0))
-		if gw > 0 and gh > 0:
-			var src := Rect2(int(g.get("x", 0)), int(g.get("y", 0)), gw, gh)
-			var dst := Rect2(pen + Vector2(int(g.get("xoffset", 0)), int(g.get("yoffset", 0))) * s, Vector2(gw, gh) * s)
-			c.draw_texture_rect_region(data.texture, dst, src)
-		pen.x += int(g.get("xadvance", gw)) * s
-		prev = code
-	# caret-ish baseline hint
-	c.draw_line(Vector2(margin.x, margin.y + int(data.common.get("base", lh)) * s), Vector2(c.size.x - 8, margin.y + int(data.common.get("base", lh)) * s), Color(1, 1, 1, 0.08), 1.0)
+	_sync_props(); _refresh_glyph_list(); _refresh_preview(); _set_status("Applied xadvance %+d to all glyphs" % delta)
 
 func _on_save_fnt() -> void:
 	if data == null or data.image == null:
@@ -722,7 +740,7 @@ func _on_repack() -> void:
 	data.image = img
 	data.texture = ImageTexture.create_from_image(img)
 	data.common["scaleW"] = nw; data.common["scaleH"] = nh
-	atlas.queue_redraw(); preview_canvas.queue_redraw(); _refresh_stats()
+	atlas.queue_redraw(); _refresh_preview(); _refresh_stats()
 	_set_status("Repacked atlas to %dx%d (%d glyphs)" % [nw, nh, glyphs.size()])
 
 func _try_pack(glyphs: Array, W: int, H: int, pad: int) -> Array:
@@ -775,7 +793,7 @@ func _on_autoslice_all() -> void:
 		var nb := _alpha_bounds_in_rect(r)
 		c["x"] = nb.position.x; c["y"] = nb.position.y; c["width"] = nb.size.x; c["height"] = nb.size.y
 		data.chars[id] = c; n += 1
-	atlas.queue_redraw(); preview_canvas.queue_redraw(); _refresh_stats(); _sync_props()
+	atlas.queue_redraw(); _refresh_preview(); _refresh_stats(); _sync_props()
 	_set_status("Auto-sliced %d glyphs to alpha bounds" % n)
 
 func _add_kern(a: String, b: String, amount: int) -> void:
@@ -783,16 +801,16 @@ func _add_kern(a: String, b: String, amount: int) -> void:
 	var fa := a.unicode_at(0); var fb := b.unicode_at(0)
 	for k in data.kernings:
 		if int(k.get("first", 0)) == fa and int(k.get("second", 0)) == fb:
-			k["amount"] = amount; _refresh_kern(); preview_canvas.queue_redraw(); _set_status("Updated kerning %s,%s=%d" % [a.substr(0, 1), b.substr(0, 1), amount]); return
+			k["amount"] = amount; _refresh_kern(); _refresh_preview(); _set_status("Updated kerning %s,%s=%d" % [a.substr(0, 1), b.substr(0, 1), amount]); return
 	data.kernings.append({"first": fa, "second": fb, "amount": amount})
-	_refresh_kern(); preview_canvas.queue_redraw(); _refresh_stats(); _set_status("Added kerning %s,%s=%d" % [a.substr(0, 1), b.substr(0, 1), amount])
+	_refresh_kern(); _refresh_preview(); _refresh_stats(); _set_status("Added kerning %s,%s=%d" % [a.substr(0, 1), b.substr(0, 1), amount])
 
 func _remove_kern() -> void:
 	var sel := kern_list.get_selected_items()
 	if sel.is_empty(): return
 	var meta = kern_list.get_item_metadata(sel[0])
 	data.kernings.erase(meta)
-	_refresh_kern(); preview_canvas.queue_redraw(); _refresh_stats(); _set_status("Removed kerning pair")
+	_refresh_kern(); _refresh_preview(); _refresh_stats(); _set_status("Removed kerning pair")
 
 func _on_import_image() -> void:
 	var dlg := FileDialog.new()
@@ -840,7 +858,7 @@ func _import_image(path: String) -> void:
 	font_base.value = int(data.common.get("base", 12))
 	_updating_ui = false
 	_refresh_glyph_list(); _refresh_kern(); _refresh_stats()
-	preview_canvas.queue_redraw(); atlas.queue_redraw()
+	_refresh_preview(); atlas.queue_redraw()
 
 func _detect_glyph_rects(img: Image) -> Array[Rect2i]:
 	var w := img.get_width(); var h := img.get_height()
@@ -906,12 +924,8 @@ func _on_apply_example(idx: int) -> void:
 	if idx == 0 or not theme_map.has(idx):
 		# None: use an empty theme so the editor shows Godot's default UI (not the project custom theme)
 		theme = Theme.new()
-		if preview_edit:
-			preview_edit.remove_theme_font_override("font")
-			preview_edit.remove_theme_font_size_override("font_size")
 		_clear_ui_tint()
-		preview_scale = 1.0
-		preview_canvas.queue_redraw()
+		_refresh_preview()
 		_save_apply_settings(0)
 		_set_status("Applied no theme (Godot default)")
 		return
@@ -934,13 +948,8 @@ func _on_apply_example(idx: int) -> void:
 			t.default_font = load(fpath)
 		t.default_font_size = sz
 		theme = t
-	if preview_edit:
-		preview_edit.remove_theme_font_override("font")
-		preview_edit.remove_theme_font_size_override("font_size")
 	_apply_ui_tint()
-	# keep canvas preview scale in sync with selection (1x for odd, 2x for even >0)
-	preview_scale = 2.0 if idx % 2 == 0 else 1.0
-	preview_canvas.queue_redraw()
+	_refresh_preview()
 	_save_apply_settings(idx)
 	_set_status("Applied theme to root: %s" % tpath.get_file())
 
@@ -1390,7 +1399,7 @@ func _pack_rendered_font(font_face: String, font_size: int, rendered: Array, pad
 	font_base.value = int(data.common.get("base", int(font_size * 0.8)))
 	_updating_ui = false
 	_refresh_glyph_list(); _refresh_kern(); _refresh_stats()
-	preview_canvas.queue_redraw(); atlas.queue_redraw()
+	_refresh_preview(); atlas.queue_redraw()
 	var filt_name := "Nearest" if filter_mode == 0 else "Linear"
 	_set_status("Imported TTF/OTF '%s' at size %d: %d glyphs rasterized (%s filter)" % [font_face, font_size, data.chars.size(), filt_name])
 
