@@ -18,6 +18,7 @@ var stats_lbl: RichTextLabel
 var load_demo_lbl: Label
 var apply_demo_lbl: Label
 var preview_lbl: Label
+var import_demo_lbl: Label
 var kern_list: ItemList
 var prop_spin: Dictionary = {}
 var font_line_h: SpinBox
@@ -199,6 +200,8 @@ func _clear_ui_tint() -> void:
 		load_demo_lbl.remove_theme_color_override("font_color")
 	if apply_demo_lbl:
 		apply_demo_lbl.remove_theme_color_override("font_color")
+	if import_demo_lbl:
+		import_demo_lbl.remove_theme_color_override("font_color")
 	if preview_lbl:
 		preview_lbl.remove_theme_color_override("font_color")
 
@@ -266,6 +269,20 @@ func _build_ui() -> void:
 	load_dd.item_selected.connect(func(i): _on_load_example(load_dd.get_item_id(i)); load_dd.select(0))
 	examples_row.add_child(load_dd)
 	examples_row.add_child(VSeparator.new())
+
+	import_demo_lbl = _lbl("Import Demo:")
+	import_demo_lbl.add_theme_color_override("font_color", Color(0.72, 0.84, 1.0))
+	examples_row.add_child(import_demo_lbl)
+	var import_dd := OptionButton.new()
+	import_dd.add_item("Select", 0)
+	for entry in _import_demo_paths():
+		import_dd.add_item(str(entry.name), import_dd.item_count + 1)
+		import_dd.set_item_metadata(import_dd.item_count - 1, str(entry.path))
+	import_dd.tooltip_text = "Import (rasterize) an included TTF/OTF demo font"
+	import_dd.item_selected.connect(func(i): _on_import_demo_selected(import_dd, i))
+	examples_row.add_child(import_dd)
+	examples_row.add_child(VSeparator.new())
+
 	apply_demo_lbl = _lbl("Apply Demo:")
 	apply_demo_lbl.add_theme_color_override("font_color", Color(0.72, 0.84, 1.0))
 	examples_row.add_child(apply_demo_lbl)
@@ -895,6 +912,38 @@ func _example_paths() -> Dictionary:
 		1: "res://fnt/Venice16.fnt",
 		2: "res://fnt/Super12.fnt",
 	}
+
+func _import_demo_paths() -> Array:
+	var out: Array = []
+	var dir := DirAccess.open("res://font")
+	if dir == null:
+		return out
+	dir.list_dir_begin()
+	var fn := dir.get_next()
+	while fn != "":
+		if not dir.current_is_dir():
+			var lower := fn.to_lower()
+			if lower.ends_with(".ttf") or lower.ends_with(".otf"):
+				out.append({"name": fn.get_basename(), "path": "res://font/" + fn})
+		fn = dir.get_next()
+	dir.list_dir_end()
+	out.sort_custom(func(a, b): return str(a.get("name", "")) < str(b.get("name", "")))
+	return out
+
+func _on_import_demo_selected(dd: OptionButton, i: int) -> void:
+	var item_id := dd.get_item_id(i)
+	if item_id <= 0:
+		dd.select(0)
+		return
+	var path := str(dd.get_item_metadata(i))
+	dd.select(0)
+	await _import_demo(path)
+
+func _import_demo(path: String) -> void:
+	if path == "":
+		return
+	var opts := _load_ttf_import_settings()
+	await _import_ttf(path, opts)
 
 func _on_load_example(id: int) -> void:
 	if id <= 0: return
