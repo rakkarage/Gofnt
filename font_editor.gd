@@ -511,7 +511,9 @@ func _on_list_selected(idx: int) -> void:
 		_set_status("Created glyph %d (%s) — set its rect in the atlas/properties" % [id, ("space" if id == 32 else String.chr(id))])
 	sel_id = id
 	atlas.selected_id = sel_id
-	atlas.queue_redraw()
+	# Pan the atlas view to the selected glyph so it can be found even after
+	# the view was panned/zoomed off-screen.
+	atlas.focus_glyph(sel_id)
 	_sync_props()
 	_populate_glyph_jump(id)
 
@@ -1343,4 +1345,3 @@ func _try_pack_ttf(glyphs: Array, W: int, H: int, pad: int) -> Array:
 		x += gw + pad
 		row_h = maxi(row_h, gh)
 	return out
-

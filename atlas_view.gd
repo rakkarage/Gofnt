@@ -14,6 +14,7 @@ var drag_mode := "" # move, n,s,e,w,nw,ne,sw,se
 var drag_start_mouse := Vector2.ZERO
 var drag_start_rect := Rect2i()
 var hover_mode := ""
+var _pan_tween: Tween = null
 const HANDLE := 6.0
 
 func _ready() -> void:
@@ -24,7 +25,75 @@ func _ready() -> void:
 func set_data(d: BMFontData) -> void:
 	data = d
 	selected_id = -1
+	# Reset the view when a new font is loaded so a previously panned/zoomed
+	# (possibly off-screen) view doesn't hide the freshly loaded atlas.
+	zoom = 4.0
+	pan = Vector2(20, 20)
 	queue_redraw()
+
+func _kill_pan_tween() -> void:
+	if _pan_tween and is_instance_valid(_pan_tween):
+		_pan_tween.kill()
+	_pan_tween = null
+
+func focus_glyph(id: int) -> void:
+	_kill_pan_tween()
+	selected_id = id
+	if data == null:
+		queue_redraw(); return
+	if not data.chars.has(id):
+		queue_redraw(); return
+	var r := _glyph_rect(id)
+	if r.size.x <= 0 or r.size.y <= 0:
+		# No usable rect: just center the origin so the user can place it.
+		pan = size * 0.5 - Vector2(zoom * 4.0, zoom * 4.0)
+		queue_redraw(); return
+	var center := Vector2(r.position) + Vector2(r.size) * 0.5
+	# If the glyph (with a small margin) doesn't fit at the current zoom, zoom
+	# out just enough so it becomes visible rather than staying off-screen.
+	var margin := 24.0
+	var avail := size - Vector2(margin * 2.0, margin * 2.0)
+	if avail.x > 0 and avail.y > 0:
+		var need_zoom_x := avail.x / float(r.size.x + 8)
+		var need_zoom_y := avail.y / float(r.size.y + 8)
+		var need_zoom := minf(need_zoom_x, need_zoom_y)
+		if need_zoom < zoom:
+			zoom = clampf(need_zoom, 0.5, 32.0)
+	pan = size * 0.5 - center * zoom
+	queue_redraw()
+
+func reset_view() -> void:
+	_kill_pan_tween()
+	zoom = 4.0
+	pan = Vector2(20, 20)
+	queue_redraw()
+
+func _tween_pan(target: Vector2) -> void:
+	_kill_pan_tween()
+	_pan_tween = create_tween()
+	_pan_tween.tween_property(self, "pan", target, 0.3).set_trans(Tween.TRANS_SPRING).set_ease(Tween.EASE_OUT)
+
+func _constrain_pan() -> void:
+	if data == null or data.texture == null:
+		return
+	var ts := _tex_size()
+	if ts.x <= 0 or ts.y <= 0:
+		return
+	# Work in world/texture space, then convert deltas back to screen space.
+	var view_rect := Rect2(-pan / zoom, size / zoom)
+	var map_rect := Rect2(Vector2.ZERO, ts).grow(8.0 / zoom)
+	if view_rect.intersects(map_rect):
+		return
+	var delta := Vector2.ZERO
+	if view_rect.position.x > map_rect.position.x:
+		delta.x += map_rect.position.x - view_rect.position.x
+	if view_rect.end.x < map_rect.end.x:
+		delta.x -= view_rect.end.x - map_rect.end.x
+	if view_rect.position.y > map_rect.position.y:
+		delta.y += map_rect.position.y - view_rect.position.y
+	if view_rect.end.y < map_rect.end.y:
+		delta.y -= view_rect.end.y - map_rect.end.y
+	_tween_pan(pan + delta * zoom)
 
 func _tex_size() -> Vector2:
 	if data and data.texture:
@@ -118,13 +187,35 @@ func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_WHEEL_UP and mb.pressed:
-			zoom = clampf(zoom * 1.1, 0.5, 32.0); queue_redraw(); accept_event(); return
+			_kill_pan_tween()
+			var old_zoom := zoom
+			zoom = clampf(zoom * 1.1, 0.5, 32.0)
+			# Keep the point under the cursor anchored so zoom doesn't drift off-screen.
+			if zoom != old_zoom and old_zoom > 0.0:
+				pan = mb.position - (mb.position - pan) * (zoom / old_zoom)
+			if zoom != old_zoom:
+				_constrain_pan()
+			queue_redraw(); accept_event(); return
 		if mb.button_index == MOUSE_BUTTON_WHEEL_DOWN and mb.pressed:
-			zoom = clampf(zoom / 1.1, 0.5, 32.0); queue_redraw(); accept_event(); return
+			_kill_pan_tween()
+			var old_zoom2 := zoom
+			zoom = clampf(zoom / 1.1, 0.5, 32.0)
+			if zoom != old_zoom2 and old_zoom2 > 0.0:
+				pan = mb.position - (mb.position - pan) * (zoom / old_zoom2)
+			if zoom != old_zoom2:
+				_constrain_pan()
+			queue_redraw(); accept_event(); return
 		if mb.button_index == MOUSE_BUTTON_MIDDLE:
-			dragging = mb.pressed; drag_mode = "pan"; drag_start_mouse = mb.position; drag_start_rect = Rect2i(Vector2i(pan), Vector2i.ZERO); accept_event(); return
+			if mb.pressed:
+				_kill_pan_tween()
+				dragging = true; drag_mode = "pan"; drag_start_mouse = mb.position; drag_start_rect = Rect2i(Vector2i(pan), Vector2i.ZERO); accept_event(); return
+			else:
+				dragging = false; drag_mode = ""
+				_constrain_pan()
+				accept_event(); return
 		if mb.button_index == MOUSE_BUTTON_LEFT:
 			if mb.pressed:
+				_kill_pan_tween()
 				var tp := _to_local_tex(mb.position)
 				if selected_id != -1 and data.chars.has(selected_id):
 					var r := _glyph_rect(selected_id)
