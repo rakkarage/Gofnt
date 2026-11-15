@@ -55,6 +55,10 @@ func _apply_project_default_theme() -> void:
 		preview_canvas.queue_redraw()
 
 func _unhandled_input(event: InputEvent) -> void:
+	# Never toggle window mode from within the Godot editor (tool mode): it would
+	# hide the editor's title bar / close buttons and persist into the editor.
+	if Engine.is_editor_hint():
+		return
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F11:
 		if fullscreen_cb:
 			fullscreen_cb.button_pressed = not fullscreen_cb.button_pressed
@@ -68,12 +72,27 @@ func _is_fullscreen() -> bool:
 
 func _set_fullscreen(enabled: bool, persist: bool = true) -> void:
 	var win := get_window()
+	if Engine.is_editor_hint():
+		# In the editor, never change the editor window's mode; just keep it windowed.
+		if win:
+			win.mode = Window.MODE_WINDOWED
+		return
 	if win:
 		win.mode = Window.MODE_FULLSCREEN if enabled else Window.MODE_WINDOWED
 	if persist:
 		_save_window_settings(enabled)
 
 func _load_window_settings() -> void:
+	if Engine.is_editor_hint():
+		# In the editor, ignore any persisted fullscreen state and force a normal
+		# window so the editor's title bar / close buttons stay available.
+		var win := get_window()
+		if win:
+			win.mode = Window.MODE_WINDOWED
+		if fullscreen_cb:
+			fullscreen_cb.set_pressed_no_signal(false)
+			fullscreen_cb.disabled = true
+		return
 	var cfg := ConfigFile.new()
 	var enabled := false
 	if cfg.load(SETTINGS_PATH) == OK:
@@ -83,6 +102,8 @@ func _load_window_settings() -> void:
 	_set_fullscreen(enabled, false)
 
 func _save_window_settings(enabled: bool) -> void:
+	if Engine.is_editor_hint():
+		return
 	var cfg := ConfigFile.new()
 	cfg.load(SETTINGS_PATH)
 	cfg.set_value(SETTINGS_SECTION, SETTINGS_FULLSCREEN_KEY, enabled)
