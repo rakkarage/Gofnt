@@ -30,7 +30,6 @@ var prop_spin: Dictionary = {}
 var apply_dd: OptionButton
 var _ttf_font_path: String = ""
 @onready var ttf_dialog: AcceptDialog = $TtfDialog
-@onready var probe_dialog: AcceptDialog = $ProbeDialog
 var preview_scale: float = 2.0
 var sel_id: int = -1
 var _updating_ui := false
@@ -323,8 +322,6 @@ func _bind_ui() -> void:
 
 	# TTF import dialog
 	ttf_dialog.canceled.connect(func(): ttf_dialog.hide())
-	probe_dialog.canceled.connect(func(): probe_dialog.hide())
-	probe_dialog.confirmed.connect(func(): probe_dialog.hide())
 	var ttf_reset_btn := ttf_dialog.get_node("Scroll/VBox/ResetBtn") as Button
 	ttf_reset_btn.pressed.connect(_reset_ttf_dialog)
 	ttf_dialog.confirmed.connect(func():
@@ -1347,139 +1344,3 @@ func _try_pack_ttf(glyphs: Array, W: int, H: int, pad: int) -> Array:
 		row_h = maxi(row_h, gh)
 	return out
 
-func _on_probe_fonts() -> void:
-	var report := _probe_fonts_report()
-	_set_status("Font probe complete - see diagnostics dialog", report.has("had_error") and bool(report.had_error))
-	var out := probe_dialog.get_node("VBox/Output") as RichTextLabel
-	out.text = str(report.get("text", ""))
-	probe_dialog.popup_centered(Vector2i(900, 620))
-
-func _probe_fonts_report() -> Dictionary:
-	var lines: PackedStringArray = []
-	var had_error := false
-	lines.append("Platform: %s" % OS.get_name())
-	lines.append("OS.has_feature(\"web\"): %s" % str(OS.has_feature("web")))
-	lines.append("OS.has_feature(\"template\"): %s" % str(OS.has_feature("template")))
-	lines.append("ProjectSettings.globalize_path(\"res://\"): %s" % ProjectSettings.globalize_path("res://"))
-	lines.append("")
-	var paths: PackedStringArray = []
-	for p in _example_paths().values():
-		if not paths.has(str(p)):
-			paths.append(str(p))
-	# also scan res://fnt for any .fnt files (best-effort)
-	var dir := DirAccess.open("res://fnt")
-	if dir != null:
-		dir.list_dir_begin()
-		var fn := dir.get_next()
-		while fn != "":
-			if not dir.current_is_dir() and fn.to_lower().ends_with(".fnt"):
-				var fp := "res://fnt/" + fn
-				if not paths.has(fp):
-					paths.append(fp)
-			fn = dir.get_next()
-		dir.list_dir_end()
-	else:
-		lines.append("[!] Could not open DirAccess for res://fnt (open error: %d)" % DirAccess.get_open_error())
-		lines.append("")
-	if paths.is_empty():
-		lines.append("No .fnt paths discovered to probe.")
-		return {"text": "\n".join(lines), "had_error": true}
-	for path in paths:
-		lines.append("=== %s ===" % path)
-		var perr := _probe_single_font_path(path, lines)
-		if perr:
-			had_error = true
-		lines.append("")
-	return {"text": "\n".join(lines), "had_error": had_error}
-
-func _probe_single_font_path(path: String, lines: PackedStringArray) -> bool:
-	var had_error := false
-	var variants: PackedStringArray = [path]
-	if not path.ends_with(".txt"):
-		variants.append(path + ".txt")
-		variants.append(path.get_basename() + ".txt")
-	for p in variants:
-		if p == path:
-			continue
-		# listed as probe candidates; existence shown below
-		pass
-	for p in [path, path + ".txt"]:
-		var exists := FileAccess.file_exists(p)
-		var open_err := -1
-		var f := FileAccess.open(p, FileAccess.READ)
-		if f != null:
-			open_err = OK
-			var txt := f.get_as_text()
-			var preview := txt.substr(0, 80).replace("\n", "\\n")
-			lines.append("  FileAccess open: %s | exists=%s open_err=%s len=%d preview=%s" % [p, str(exists), str(open_err), txt.length(), preview])
-		else:
-			open_err = FileAccess.get_open_error()
-			lines.append("  FileAccess open: %s | exists=%s open_err=%d" % [p, str(exists), open_err])
-	lines.append("  ResourceLoader.exists(%s): %s" % [path, str(ResourceLoader.exists(path))])
-	if ResourceLoader.exists(path):
-		var res = ResourceLoader.load(path)
-		lines.append("  ResourceLoader.load type: %s" % (res.get_class() if res != null else "<null>"))
-	# Try BMFontData.load_fnt simulation
-	var probe := BMFontData.new()
-	var err := probe.load_fnt(path)
-	var err_name := error_string(err)
-	lines.append("  BMFontData.load_fnt -> err=" + str(err) + " (" + err_name + ") | fnt_path=" + str(probe.fnt_path) + " | image_path=" + str(probe.image_path) + " | chars=" + str(probe.chars.size()))
-	if err != OK:
-		had_error = true
-	if not probe.pages.is_empty():
-		lines.append("  Parsed pages: " + str(probe.pages))
-	var probe_img_path := str(probe.image_path)
-	if probe_img_path == "" and not probe.pages.is_empty():
-		var pf := str(probe.pages[0].get("file", ""))
-		if pf != "":
-			probe_img_path = str(probe.fnt_path).get_base_dir().path_join(pf) if str(probe.fnt_path) != "" else path.get_base_dir().path_join(pf)
-			lines.append("  Guessed page image: " + probe_img_path)
-	if probe_img_path != "":
-		had_error = _probe_image_path(probe_img_path, lines) or had_error
-	else:
-		lines.append("  Image probe: <no page image path resolved>")
-		had_error = true
-	if err == OK:
-		lines.append("  Parsed: face=" + str(probe.info.get("face", "")) + " pages=" + str(probe.pages) + " scale=" + str(probe.common.get("scaleW", "")) + "x" + str(probe.common.get("scaleH", "")))
-		if probe.texture == null or probe.image == null:
-			lines.append("  [!] Parsed but texture/image missing")
-			had_error = true
-	# raw bytes hint
-	var bytes := FileAccess.get_file_as_bytes(path)
-	lines.append("  get_file_as_bytes size=" + str(bytes.size()))
-	return had_error
-
-func _probe_image_path(path: String, lines: PackedStringArray) -> bool:
-	var had_error := false
-	var candidates: PackedStringArray = [path, path + ".txt", path + ".bytes", path + ".bin"]
-	if path.get_extension().to_lower() == "png":
-		candidates.append(path.get_basename() + ".png.txt")
-	# de-duplicate while preserving order
-	var unique: PackedStringArray = []
-	for c in candidates:
-		if not unique.has(c):
-			unique.append(c)
-	candidates = unique
-	var any_ok := false
-	for p in candidates:
-		var exists := FileAccess.file_exists(p)
-		var bytes := FileAccess.get_file_as_bytes(p)
-		var ferr := -1
-		var f := FileAccess.open(p, FileAccess.READ)
-		if f != null:
-			ferr = OK
-		else:
-			ferr = FileAccess.get_open_error()
-		var rex := ResourceLoader.exists(p)
-		if ferr == OK or bytes.size() > 0 or rex:
-			any_ok = true
-		lines.append("  Image probe: %s | file_exists=%s open_err=%d bytes=%d ResourceLoader.exists=%s" % [p, str(exists), ferr, bytes.size(), str(rex)])
-		if rex:
-			var res = ResourceLoader.load(p)
-			lines.append("    ResourceLoader.load type: %s" % (res.get_class() if res != null else "<null>"))
-			if res is Texture2D:
-				var img := (res as Texture2D).get_image()
-				lines.append("    Texture2D.get_image: %s" % ("ok %dx%d" % [img.get_width(), img.get_height()] if img != null else "<null>"))
-	if not any_ok:
-		had_error = true
-	return had_error

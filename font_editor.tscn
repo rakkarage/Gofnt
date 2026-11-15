@@ -514,21 +514,3 @@ autowrap_mode = 3
 [node name="ResetBtn" type="Button" parent="TtfDialog/Scroll/VBox" unique_id=180755659]
 layout_mode = 2
 text = "Reset"
-
-[node name="ProbeDialog" type="AcceptDialog" parent="." unique_id=1292243678]
-title = "Font Probe Diagnostics"
-
-[node name="VBox" type="VBoxContainer" parent="ProbeDialog" unique_id=223792306]
-custom_minimum_size = Vector2(820, 520)
-
-[node name="InfoLabel" type="Label" parent="ProbeDialog/VBox" unique_id=519255656]
-layout_mode = 2
-text = "Diagnostics for bundled .fnt loading (helps debug web/export issues like err 12 = ERR_FILE_CANT_OPEN)."
-autowrap_mode = 3
-
-[node name="Output" type="RichTextLabel" parent="ProbeDialog/VBox" unique_id=993879263]
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 3
-focus_mode = 2
-selection_enabled = true
