@@ -355,14 +355,9 @@ value = 16.0
 layout_mode = 2
 text = "Filter"
 
-[node name="FilterOption" type="OptionButton" parent="TtfDialog/Scroll/VBox/Grid" unique_id=999909260]
+[node name="FilterCheck" type="CheckBox" parent="TtfDialog/Scroll/VBox/Grid" unique_id=999909260]
 layout_mode = 2
-selected = 0
-item_count = 2
-popup/item_0/text = "Nearest (pixel)"
-popup/item_0/id = 0
-popup/item_1/text = "Linear (smooth)"
-popup/item_1/id = 1
+text = "Smooth (linear)"
 
 [node name="PaddingLabel" type="Label" parent="TtfDialog/Scroll/VBox/Grid" unique_id=296044283]
 layout_mode = 2
@@ -377,14 +372,17 @@ max_value = 32.0
 layout_mode = 2
 text = "Atlas tiebreaker"
 
-[node name="TieOption" type="OptionButton" parent="TtfDialog/Scroll/VBox/Grid" unique_id=274454078]
+[node name="TieBox" type="HBoxContainer" parent="TtfDialog/Scroll/VBox/Grid" unique_id=274454078]
 layout_mode = 2
-selected = 0
-item_count = 2
-popup/item_0/text = "Prefer wide"
-popup/item_0/id = 0
-popup/item_1/text = "Prefer tall"
-popup/item_1/id = 1
+
+[node name="TieWideRadio" type="CheckBox" parent="TtfDialog/Scroll/VBox/Grid/TieBox" unique_id=274454079]
+layout_mode = 2
+button_pressed = true
+text = "Prefer wide"
+
+[node name="TieTallRadio" type="CheckBox" parent="TtfDialog/Scroll/VBox/Grid/TieBox" unique_id=274454080]
+layout_mode = 2
+text = "Prefer tall"
 
 [node name="OutlineLabel" type="Label" parent="TtfDialog/Scroll/VBox/Grid" unique_id=697249002]
 layout_mode = 2
@@ -485,7 +483,7 @@ layout_mode = 2
 text = "Charset"
 
 [node name="CharsetEdit" type="TextEdit" parent="TtfDialog/Scroll/VBox/Grid" unique_id=637876446]
-custom_minimum_size = Vector2(420, 80)
+custom_minimum_size = Vector2(420, 110)
 layout_mode = 2
 text = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
 wrap_mode = 1

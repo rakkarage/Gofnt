@@ -321,14 +321,17 @@ func _bind_ui() -> void:
 	ttf_dialog.canceled.connect(func(): ttf_dialog.hide())
 	var ttf_reset_btn := ttf_dialog.get_node("Scroll/VBox/ResetBtn") as Button
 	ttf_reset_btn.pressed.connect(_reset_ttf_dialog)
+	var ttf_fill := ttf_dialog.get_node("Scroll/VBox/Grid/FillOption") as OptionButton
+	ttf_fill.item_selected.connect(func(_i): _update_ttf_fill_visibility())
+	_setup_ttf_tie_radios()
 	ttf_dialog.confirmed.connect(func():
 		var g := "Scroll/VBox/Grid/"
 		var opts := {
 			"size": int((ttf_dialog.get_node(g + "SizeSpin") as SpinBox).value),
 			"charset": (ttf_dialog.get_node(g + "CharsetEdit") as TextEdit).text,
-			"filter": int((ttf_dialog.get_node(g + "FilterOption") as OptionButton).get_selected_id()),
+			"filter": 1 if (ttf_dialog.get_node(g + "FilterCheck") as CheckBox).button_pressed else 0,
 			"padding": int((ttf_dialog.get_node(g + "PaddingSpin") as SpinBox).value),
-			"pack_tiebreaker": int((ttf_dialog.get_node(g + "TieOption") as OptionButton).get_selected_id()),
+			"pack_tiebreaker": 1 if (ttf_dialog.get_node(g + "TieBox/TieTallRadio") as CheckBox).button_pressed else 0,
 			"outline": int((ttf_dialog.get_node(g + "OutlineSpin") as SpinBox).value),
 			"outline_color": (ttf_dialog.get_node(g + "OutlineColorPicker") as ColorPickerButton).color,
 			"fill_mode": int((ttf_dialog.get_node(g + "FillOption") as OptionButton).get_selected_id()),
@@ -1080,11 +1083,9 @@ func _show_ttf_options(font_path: String) -> void:
 func _populate_ttf_dialog(saved: Dictionary) -> void:
 	var g := "Scroll/VBox/Grid/"
 	(ttf_dialog.get_node(g + "SizeSpin") as SpinBox).value = int(saved.get("size", 16))
-	var filt := ttf_dialog.get_node(g + "FilterOption") as OptionButton
-	filt.select(clampi(int(saved.get("filter", 0)), 0, 1))
+	(ttf_dialog.get_node(g + "FilterCheck") as CheckBox).button_pressed = int(saved.get("filter", 0)) == 1
 	(ttf_dialog.get_node(g + "PaddingSpin") as SpinBox).value = int(saved.get("padding", 0))
-	var tie := ttf_dialog.get_node(g + "TieOption") as OptionButton
-	tie.select(clampi(int(saved.get("pack_tiebreaker", 0)), 0, 1))
+	_set_ttf_tie_radio(int(saved.get("pack_tiebreaker", 0)))
 	(ttf_dialog.get_node(g + "OutlineSpin") as SpinBox).value = int(saved.get("outline", 0))
 	(ttf_dialog.get_node(g + "OutlineColorPicker") as ColorPickerButton).color = saved.get("outline_color", Color.BLACK)
 	var fill := ttf_dialog.get_node(g + "FillOption") as OptionButton
@@ -1097,15 +1098,16 @@ func _populate_ttf_dialog(saved: Dictionary) -> void:
 	proc.select(clampi(int(saved.get("proc_effect", 0)), 0, 4))
 	(ttf_dialog.get_node(g + "ProcColorPicker") as ColorPickerButton).color = saved.get("proc_color", Color.WHITE)
 	(ttf_dialog.get_node(g + "CharsetEdit") as TextEdit).text = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+	_update_ttf_fill_visibility()
 
 func _reset_ttf_dialog() -> void:
 	var defaults := _default_ttf_import_settings()
 	# apply defaults for colors etc already in defaults
 	var g := "Scroll/VBox/Grid/"
 	(ttf_dialog.get_node(g + "SizeSpin") as SpinBox).value = int(defaults.get("size", 16))
-	(ttf_dialog.get_node(g + "FilterOption") as OptionButton).select(clampi(int(defaults.get("filter", 0)), 0, 1))
+	(ttf_dialog.get_node(g + "FilterCheck") as CheckBox).button_pressed = int(defaults.get("filter", 0)) == 1
 	(ttf_dialog.get_node(g + "PaddingSpin") as SpinBox).value = int(defaults.get("padding", 0))
-	(ttf_dialog.get_node(g + "TieOption") as OptionButton).select(clampi(int(defaults.get("pack_tiebreaker", 0)), 0, 1))
+	_set_ttf_tie_radio(int(defaults.get("pack_tiebreaker", 0)))
 	(ttf_dialog.get_node(g + "OutlineSpin") as SpinBox).value = int(defaults.get("outline", 0))
 	(ttf_dialog.get_node(g + "OutlineColorPicker") as ColorPickerButton).color = defaults.get("outline_color", Color.BLACK)
 	(ttf_dialog.get_node(g + "FillOption") as OptionButton).select(clampi(int(defaults.get("fill_mode", 0)), 0, 2))
@@ -1114,6 +1116,44 @@ func _reset_ttf_dialog() -> void:
 	(ttf_dialog.get_node(g + "GradToPicker") as ColorPickerButton).color = defaults.get("gradient_color2", Color(0.7, 0.85, 1.0, 1.0))
 	(ttf_dialog.get_node(g + "ProcEffectOption") as OptionButton).select(clampi(int(defaults.get("proc_effect", 0)), 0, 4))
 	(ttf_dialog.get_node(g + "ProcColorPicker") as ColorPickerButton).color = defaults.get("proc_color", Color.WHITE)
+	_update_ttf_fill_visibility()
+
+func _setup_ttf_tie_radios() -> void:
+	var g := "Scroll/VBox/Grid/TieBox/"
+	var wide := ttf_dialog.get_node_or_null(g + "TieWideRadio") as CheckBox
+	var tall := ttf_dialog.get_node_or_null(g + "TieTallRadio") as CheckBox
+	if wide == null or tall == null:
+		return
+	if wide.button_group == null:
+		var bg := ButtonGroup.new()
+		wide.button_group = bg
+		tall.button_group = bg
+
+func _set_ttf_tie_radio(v: int) -> void:
+	_setup_ttf_tie_radios()
+	var g := "Scroll/VBox/Grid/TieBox/"
+	var wide := ttf_dialog.get_node_or_null(g + "TieWideRadio") as CheckBox
+	var tall := ttf_dialog.get_node_or_null(g + "TieTallRadio") as CheckBox
+	if wide == null or tall == null:
+		return
+	tall.button_pressed = v == 1
+	wide.button_pressed = v != 1
+
+func _update_ttf_fill_visibility() -> void:
+	var g := "Scroll/VBox/Grid/"
+	var fill := ttf_dialog.get_node_or_null(g + "FillOption") as OptionButton
+	if fill == null:
+		return
+	var mode := fill.get_selected_id()
+	var is_grad := mode == 1
+	var is_proc := mode == 2
+	for n in ["GradientLabel", "GradientOption", "GradFromLabel", "GradFromPicker", "GradToLabel", "GradToPicker"]:
+		var node := ttf_dialog.get_node_or_null(g + n) as CanvasItem
+		if node: node.visible = is_grad
+	for n in ["ProcEffectLabel", "ProcEffectOption", "ProcColorLabel", "ProcColorPicker"]:
+		var node := ttf_dialog.get_node_or_null(g + n) as CanvasItem
+		if node: node.visible = is_proc
+
 
 func _import_ttf(font_path: String, opts: Dictionary) -> void:
 	_generating_font = true
