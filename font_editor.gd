@@ -190,6 +190,8 @@ func _load_ttf_import_settings() -> Dictionary:
 	defaults["proc_color"] = Color.from_string(str(cfg.get_value(SETTINGS_TTF_SECTION, "proc_color", defaults["proc_color"].to_html())), defaults["proc_color"])
 	defaults["padding"] = int(cfg.get_value(SETTINGS_TTF_SECTION, "padding", defaults["padding"]))
 	defaults["pack_tiebreaker"] = int(cfg.get_value(SETTINGS_TTF_SECTION, "pack_tiebreaker", defaults["pack_tiebreaker"]))
+	defaults["charset_preset"] = int(cfg.get_value(SETTINGS_TTF_SECTION, "charset_preset", defaults.get("charset_preset", 0)))
+	defaults["charset"] = str(cfg.get_value(SETTINGS_TTF_SECTION, "charset", defaults.get("charset", " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~")))
 	# Backward compat: old configs had gradient_dir but no fill_mode.
 	if defaults["fill_mode"] < 0:
 		defaults["fill_mode"] = 1 if int(defaults["gradient_dir"]) != 0 else 0
@@ -212,6 +214,8 @@ func _save_ttf_import_settings(opts: Dictionary) -> void:
 	cfg.set_value(SETTINGS_TTF_SECTION, "proc_color", (opts.get("proc_color", Color.WHITE) as Color).to_html())
 	cfg.set_value(SETTINGS_TTF_SECTION, "padding", int(opts.get("padding", 0)))
 	cfg.set_value(SETTINGS_TTF_SECTION, "pack_tiebreaker", int(opts.get("pack_tiebreaker", 0)))
+	cfg.set_value(SETTINGS_TTF_SECTION, "charset_preset", int(opts.get("charset_preset", 0)))
+	cfg.set_value(SETTINGS_TTF_SECTION, "charset", str(opts.get("charset", "")))
 	cfg.save(SETTINGS_PATH)
 
 func _apply_ui_tint() -> void:
@@ -327,9 +331,12 @@ func _bind_ui() -> void:
 	_setup_ttf_tie_radios()
 	ttf_dialog.confirmed.connect(func():
 		var g := "Scroll/VBox/Grid/"
+		var preset_node := ttf_dialog.get_node_or_null(g + "CharsetPresetOption") as OptionButton
+		var charset_preset := preset_node.get_selected_id() if preset_node else 0
 		var opts := {
 			"size": int((ttf_dialog.get_node(g + "SizeSpin") as SpinBox).value),
 			"charset": (ttf_dialog.get_node(g + "CharsetEdit") as TextEdit).text,
+			"charset_preset": charset_preset,
 			"filter": 1 if (ttf_dialog.get_node(g + "FilterCheck") as CheckBox).button_pressed else 0,
 			"padding": int((ttf_dialog.get_node(g + "PaddingSpin") as SpinBox).value),
 			"pack_tiebreaker": 1 if (ttf_dialog.get_node(g + "TieBox/TieTallRadio") as CheckBox).button_pressed else 0,
@@ -1102,7 +1109,10 @@ func _populate_ttf_dialog(saved: Dictionary) -> void:
 	var proc := ttf_dialog.get_node(g + "ProcEffectOption") as OptionButton
 	proc.select(clampi(int(saved.get("proc_effect", 0)), 0, 4))
 	(ttf_dialog.get_node(g + "ProcColorPicker") as ColorPickerButton).color = saved.get("proc_color", Color.WHITE)
-	(ttf_dialog.get_node(g + "CharsetEdit") as TextEdit).text = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+	var preset_node := ttf_dialog.get_node_or_null(g + "CharsetPresetOption") as OptionButton
+	if preset_node:
+		preset_node.select(clampi(int(saved.get("charset_preset", 0)), 0, 2))
+	(ttf_dialog.get_node(g + "CharsetEdit") as TextEdit).text = str(saved.get("charset", " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"))
 	_update_ttf_fill_visibility()
 
 func _reset_ttf_dialog() -> void:
@@ -1121,6 +1131,10 @@ func _reset_ttf_dialog() -> void:
 	(ttf_dialog.get_node(g + "GradToPicker") as ColorPickerButton).color = defaults.get("gradient_color2", Color(0.7, 0.85, 1.0, 1.0))
 	(ttf_dialog.get_node(g + "ProcEffectOption") as OptionButton).select(clampi(int(defaults.get("proc_effect", 0)), 0, 4))
 	(ttf_dialog.get_node(g + "ProcColorPicker") as ColorPickerButton).color = defaults.get("proc_color", Color.WHITE)
+	var preset_node := ttf_dialog.get_node_or_null(g + "CharsetPresetOption") as OptionButton
+	if preset_node:
+		preset_node.select(0)
+	(ttf_dialog.get_node(g + "CharsetEdit") as TextEdit).text = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
 	_update_ttf_fill_visibility()
 
 func _setup_ttf_tie_radios() -> void:
@@ -1176,6 +1190,7 @@ func _import_ttf(font_path: String, opts: Dictionary) -> void:
 		if open_btn:
 			open_btn.disabled = false
 		return
+	var charset_preset: int = int(opts.get("charset_preset", 0))
 	var charset: String = str(opts.get("charset", ""))
 	var filter_mode: int = int(opts.get("filter", 0))
 	var outline_px: int = int(opts.get("outline", 0))
@@ -1197,10 +1212,20 @@ func _import_ttf(font_path: String, opts: Dictionary) -> void:
 				open_btn.disabled = false
 			_set_status("Failed to load TTF/OTF: %s" % font_path, true); return
 		font.data = bytes
+	var charset_str := charset
+	if charset_preset == 0:
+		charset_str = ""
+		for cp in range(32, 127):
+			charset_str += String.chr(cp)
+	elif charset_preset == 1:
+		if font.has_method("get_supported_chars"):
+			charset_str = str(font.get_supported_chars())
+		else:
+			charset_str = ""
 	var unique: Dictionary = {}
 	var order: Array[int] = []
-	for i in charset.length():
-		var cp := charset.unicode_at(i)
+	for i in charset_str.length():
+		var cp := charset_str.unicode_at(i)
 		if cp == 10: continue
 		if not unique.has(cp):
 			unique[cp] = true; order.append(cp)

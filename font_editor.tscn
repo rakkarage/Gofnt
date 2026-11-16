@@ -490,13 +490,29 @@ custom_minimum_size = Vector2(120, 0)
 layout_mode = 2
 color = Color(1, 1, 1, 1)
 
+[node name="CharsetPresetLabel" type="Label" parent="TtfDialog/Scroll/VBox/Grid"]
+layout_mode = 2
+text = "Characters"
+
+[node name="CharsetPresetOption" type="OptionButton" parent="TtfDialog/Scroll/VBox/Grid"]
+layout_mode = 2
+selected = 0
+item_count = 3
+popup/item_0/text = "ASCII (32–126)"
+popup/item_0/id = 0
+popup/item_1/text = "All existing (from font)"
+popup/item_1/id = 1
+popup/item_2/text = "Custom (text below)"
+popup/item_2/id = 2
+
 [node name="CharsetLabel" type="Label" parent="TtfDialog/Scroll/VBox/Grid" unique_id=2005267676]
 layout_mode = 2
-text = "Charset"
+text = "Custom charset"
 
 [node name="CharsetEdit" type="TextEdit" parent="TtfDialog/Scroll/VBox/Grid" unique_id=637876446]
 custom_minimum_size = Vector2(420, 110)
 layout_mode = 2
+tooltip_text = "Used when a custom charset is needed. For ASCII or All existing, the preset above controls generation."
 text = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
 wrap_mode = 1
 
