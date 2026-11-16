@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" uid="uid://ci23ybeyqwbpu" path="res://font_editor.gd" id="1_66v0l"]
 [ext_resource type="Script" uid="uid://ukdsevt6ri0t" path="res://atlas_view.gd" id="2_wuqaj"]
+[ext_resource type="Script" path="res://char_preview.gd" id="3_cprev"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_66v0l"]
 content_margin_left = 0.0
@@ -106,6 +107,17 @@ layout_mode = 2
 size_flags_vertical = 3
 text = "The quick brown fox jumps over the lazy dog.
 0123456789 !?@#$%"
+
+[node name="CharPreviewLbl" type="Label" parent="Main/Left" unique_id=874518704]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.72, 0.84, 1, 1)
+text = "All chars (baseline / lineHeight)"
+
+[node name="CharPreview" type="Control" parent="Main/Left" unique_id=791373932]
+custom_minimum_size = Vector2(0, 90)
+layout_mode = 2
+size_flags_vertical = 1
+script = ExtResource("3_cprev")
 
 [node name="Tabs" type="TabContainer" parent="Main" unique_id=1040893006]
 layout_mode = 2

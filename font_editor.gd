@@ -18,6 +18,7 @@ var data: BMFontData
 @onready var preview_edit: TextEdit = $Main/Left/PreviewEdit
 @onready var stats_lbl: RichTextLabel = $Main/Tabs/FontStats/StatsLbl
 @onready var preview_lbl: Label = $Main/Left/PreviewLbl
+@onready var char_preview: Control = $Main/Left/CharPreview
 var load_demo_lbl: Label
 var apply_demo_lbl: Label
 var import_demo_lbl: Label
@@ -303,7 +304,7 @@ func _bind_ui() -> void:
 		spin.value_changed.connect(func(v): _on_prop_changed(key, int(v)))
 
 	font_line_h.value_changed.connect(func(v): if not _updating_ui: data.common["lineHeight"] = int(v); _refresh_preview())
-	font_base.value_changed.connect(func(v): if not _updating_ui: data.common["base"] = int(v))
+	font_base.value_changed.connect(func(v): if not _updating_ui: data.common["base"] = int(v); _refresh_preview())
 
 	var bulk_spin := $Main/Tabs/FontStats/BulkRow/BulkSpin as SpinBox
 	var bulk_btn := $Main/Tabs/FontStats/BulkRow/BulkApplyBtn as Button
@@ -347,6 +348,8 @@ func _bind_ui() -> void:
 	)
 
 func _refresh_preview() -> void:
+	if char_preview:
+		char_preview.set_data(data)
 	if preview_edit == null:
 		return
 	if data == null or data.image == null:
@@ -427,6 +430,8 @@ func _apply_texture_filter(filter_mode: int) -> void:
 		preview_edit.texture_filter = tf
 	if atlas:
 		atlas.texture_filter = tf
+	if char_preview:
+		char_preview.texture_filter = tf
 	# note: BMFont .fnt doesn't store Godot texture filter; this affects editor preview/atlas rendering.
 
 func _on_open() -> void:
