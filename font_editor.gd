@@ -1232,6 +1232,18 @@ func _import_ttf(font_path: String, opts: Dictionary) -> void:
 	if order.is_empty():
 		for cp in range(32, 127): order.append(cp)
 	var pad := maxi(0, int(opts.get("padding", 0)))
+	var font_ascent := font_size
+	if font.has_method("get_ascent"):
+		font_ascent = int(ceil(font.get_ascent(font_size)))
+	elif font.has_method("get_font_ascent"):
+		font_ascent = int(ceil(font.get_font_ascent(font_size)))
+	font_ascent = maxi(1, font_ascent)
+	var font_descent := maxi(0, font_size - font_ascent)
+	if font.has_method("get_descent"):
+		font_descent = int(ceil(font.get_descent(font_size)))
+	elif font.has_method("get_font_descent"):
+		font_descent = int(ceil(font.get_font_descent(font_size)))
+	var font_line_h := maxi(font_size, font_ascent + font_descent)
 	var entries: Array = []
 	# collect metrics using font
 	for cp in order:
@@ -1261,9 +1273,9 @@ func _import_ttf(font_path: String, opts: Dictionary) -> void:
 		var img: Image = null
 		if outline_px > 0 and fill_mode in [1, 2]:
 			# Render fill and outline separately so effects don't overwrite outline color.
-			img = await _render_ttf_glyph_layered(vp, ci, font, int(e.cp), font_size, margin, outline_px, outline_color, fill_mode, gradient_dir, gradient_color1, gradient_color2, proc_effect, proc_color)
+			img = await _render_ttf_glyph_layered(vp, ci, font, int(e.cp), font_size, margin, font_ascent, outline_px, outline_color, fill_mode, gradient_dir, gradient_color1, gradient_color2, proc_effect, proc_color)
 		else:
-			ci.set_meta("ds", {"font": font, "cp": e.cp, "size": font_size, "margin": margin, "outline": outline_px, "outline_color": outline_color})
+			ci.set_meta("ds", {"font": font, "cp": e.cp, "size": font_size, "margin": margin, "ascent": font_ascent, "outline": outline_px, "outline_color": outline_color})
 			vp.render_target_update_mode = SubViewport.UPDATE_ONCE
 			ci.queue_redraw()
 			await RenderingServer.frame_post_draw
@@ -1313,14 +1325,14 @@ func _import_ttf(font_path: String, opts: Dictionary) -> void:
 	_set_status("Packing font atlas...")
 	await get_tree().process_frame
 	var prefer_wide := int(opts.get("pack_tiebreaker", 0)) == 0
-	_pack_rendered_font(font_face, font_size, rendered, pad, filter_mode, prefer_wide)
+	_pack_rendered_font(font_face, font_size, rendered, pad, filter_mode, prefer_wide, font_line_h, font_ascent)
 	_generating_font = false
 	if open_btn:
 		open_btn.disabled = false
 
-func _render_ttf_glyph_layered(vp: SubViewport, ci: Control, font: Font, cp: int, font_size: int, margin: int, outline_px: int, outline_color: Color, fill_mode: int, gradient_dir: int, gradient_color1: Color, gradient_color2: Color, proc_effect: int, proc_color: Color) -> Image:
+func _render_ttf_glyph_layered(vp: SubViewport, ci: Control, font: Font, cp: int, font_size: int, margin: int, ascent: int, outline_px: int, outline_color: Color, fill_mode: int, gradient_dir: int, gradient_color1: Color, gradient_color2: Color, proc_effect: int, proc_color: Color) -> Image:
 	# Fill only: apply baked effect to the glyph fill, not the outline.
-	ci.set_meta("ds", {"font": font, "cp": cp, "size": font_size, "margin": margin, "outline": outline_px, "outline_color": outline_color, "draw_outline": false, "draw_fill": true})
+	ci.set_meta("ds", {"font": font, "cp": cp, "size": font_size, "margin": margin, "ascent": ascent, "outline": outline_px, "outline_color": outline_color, "draw_outline": false, "draw_fill": true})
 	vp.render_target_update_mode = SubViewport.UPDATE_ONCE
 	ci.queue_redraw()
 	await RenderingServer.frame_post_draw
@@ -1341,7 +1353,7 @@ func _render_ttf_glyph_layered(vp: SubViewport, ci: Control, font: Font, cp: int
 			_apply_procedural_to_bounds(img_fill, fb, proc_effect, proc_color)
 
 	# Outline only: keep its own color.
-	ci.set_meta("ds", {"font": font, "cp": cp, "size": font_size, "margin": margin, "outline": outline_px, "outline_color": outline_color, "draw_outline": true, "draw_fill": false})
+	ci.set_meta("ds", {"font": font, "cp": cp, "size": font_size, "margin": margin, "ascent": ascent, "outline": outline_px, "outline_color": outline_color, "draw_outline": true, "draw_fill": false})
 	vp.render_target_update_mode = SubViewport.UPDATE_ONCE
 	ci.queue_redraw()
 	await RenderingServer.frame_post_draw
@@ -1370,13 +1382,15 @@ func _ttf_draw_glyph(ci: Control) -> void:
 	var cp: int = ds.cp
 	var fsize: int = ds.size
 	var margin: int = ds.margin
+	var ascent: int = int(ds.get("ascent", fsize))
 	var outline: int = int(ds.get("outline", 0))
 	var outline_color: Color = ds.get("outline_color", Color.BLACK)
 	var draw_outline: bool = bool(ds.get("draw_outline", true))
 	var draw_fill: bool = bool(ds.get("draw_fill", true))
 	ci.draw_rect(Rect2(Vector2.ZERO, ci.size), Color(0, 0, 0, 0))
-	# draw baseline at margin+size
-	var baseline := Vector2(margin, margin + fsize)
+	# Draw with the font baseline at (margin, margin + ascent) so glyph yoffsets
+	# are relative to the top of the line box (BMFont convention: yoffset from line top).
+	var baseline := Vector2(margin, margin + ascent)
 	var ch := String.chr(cp)
 	if draw_outline and outline > 0:
 		for oy in range(-outline, outline + 1):
@@ -1524,7 +1538,11 @@ func _apply_procedural_to_bounds(img: Image, b: Rect2i, effect: int, tint: Color
 				out = Color(clampf(base.r * s, 0.0, 1.0), clampf(base.g * s, 0.0, 1.0), clampf(base.b * s, 0.0, 1.0), p.a)
 			img.set_pixel(x, y, out)
 
-func _pack_rendered_font(font_face: String, font_size: int, rendered: Array, pad: int, filter_mode: int = 0, prefer_wide: bool = true) -> void:
+func _pack_rendered_font(font_face: String, font_size: int, rendered: Array, pad: int, filter_mode: int = 0, prefer_wide: bool = true, line_h: int = -1, base: int = -1) -> void:
+	if line_h <= 0:
+		line_h = font_size
+	if base <= 0:
+		base = int(font_size * 0.8)
 	var glyphs: Array = []
 	for r in rendered:
 		if int(r.w) > 0 and int(r.h) > 0:
@@ -1570,7 +1588,7 @@ func _pack_rendered_font(font_face: String, font_size: int, rendered: Array, pad
 	data.image_path = ""
 	data.fnt_path = ""
 	data.info = {"face": font_face, "size": font_size}
-	data.common = {"lineHeight": font_size, "base": int(font_size * 0.8), "scaleW": nw, "scaleH": nh, "pages": 1}
+	data.common = {"lineHeight": line_h, "base": base, "scaleW": nw, "scaleH": nh, "pages": 1}
 	data.pages = [ {"id": 0, "file": font_face + ".png"}]
 	for it in best.pos:
 		var r: Dictionary = it.c
@@ -1587,8 +1605,8 @@ func _pack_rendered_font(font_face: String, font_size: int, rendered: Array, pad
 	_apply_texture_filter(filter_mode)
 	atlas.set_data(data)
 	_updating_ui = true
-	font_line_h.value = int(data.common.get("lineHeight", font_size))
-	font_base.value = int(data.common.get("base", int(font_size * 0.8)))
+	font_line_h.value = int(data.common.get("lineHeight", line_h))
+	font_base.value = int(data.common.get("base", base))
 	_updating_ui = false
 	_refresh_glyph_list(); _refresh_kern(); _refresh_stats()
 	_refresh_preview(); atlas.queue_redraw()
