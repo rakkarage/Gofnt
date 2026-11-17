@@ -5,8 +5,6 @@ const SETTINGS_PATH := "user://settings.cfg"
 const SETTINGS_SECTION := "window"
 const SETTINGS_FULLSCREEN_KEY := "fullscreen"
 const SETTINGS_TTF_SECTION := "ttf_import"
-const SETTINGS_UI_SECTION := "ui"
-const SETTINGS_APPLY_DEMO_KEY := "apply_demo"
 const SETTINGS_FILEDIALOG_SECTION := "file_dialog"
 const SETTINGS_FILEDIALOG_FAVORITES_KEY := "favorites"
 
@@ -17,18 +15,13 @@ var data: BMFontData
 @onready var status_lbl: Label = $Main/Left/StatusLbl
 @onready var preview_edit: TextEdit = $Main/Left/PreviewEdit
 @onready var stats_lbl: RichTextLabel = $Main/Tabs/FontStats/StatsLbl
-@onready var preview_lbl: Label = $Main/Left/PreviewLbl
 @onready var char_preview: Control = $Main/Left/CharPreview
-var load_demo_lbl: Label
-var apply_demo_lbl: Label
-var import_demo_lbl: Label
 @onready var kern_list: ItemList = $Main/Tabs/Kerning/KernList
 var prop_spin: Dictionary = {}
 @onready var font_line_h: SpinBox = $Main/Tabs/FontStats/FontGrid/FontLineH
 @onready var font_base: SpinBox = $Main/Tabs/FontStats/FontGrid/FontBase
 @onready var glyph_action_btn: Button = $Main/Tabs/Glyph/GlyphActionBtn
 @onready var fullscreen_cb: CheckBox = $Main/Left/Toolbar/FullscreenCb
-var apply_dd: OptionButton
 var _ttf_font_path: String = ""
 @onready var ttf_dialog: AcceptDialog = $TtfDialog
 var preview_scale: float = 2.0
@@ -45,19 +38,10 @@ func _ready() -> void:
 	_bind_ui()
 	_apply_ui_tint()
 	set_process_unhandled_input(true)
-	_apply_project_default_theme()
+	_refresh_preview()
 	_load_window_settings()
-	_load_apply_settings()
 	_load_file_dialog_favorites()
 	_set_status("Drop-ready: use Open .fnt to load a bitmap font (text BMFont) and its atlas PNG.  Toggle Fullscreen with F11 or the checkbox.")
-
-func _apply_project_default_theme() -> void:
-	var def_path := str(ProjectSettings.get_setting("gui/theme/custom", "res://theme/venice16_x1.tres"))
-	if def_path != "" and ResourceLoader.exists(def_path):
-		theme = load(def_path)
-	elif ResourceLoader.exists("res://theme/venice16_x1.tres"):
-		theme = load("res://theme/venice16_x1.tres")
-	_refresh_preview()
 
 func _exit_tree() -> void:
 	_save_file_dialog_favorites()
@@ -190,6 +174,7 @@ func _load_ttf_import_settings() -> Dictionary:
 	defaults["proc_color"] = Color.from_string(str(cfg.get_value(SETTINGS_TTF_SECTION, "proc_color", defaults["proc_color"].to_html())), defaults["proc_color"])
 	defaults["padding"] = int(cfg.get_value(SETTINGS_TTF_SECTION, "padding", defaults["padding"]))
 	defaults["pack_tiebreaker"] = int(cfg.get_value(SETTINGS_TTF_SECTION, "pack_tiebreaker", defaults["pack_tiebreaker"]))
+	defaults["line_height_mode"] = int(cfg.get_value(SETTINGS_TTF_SECTION, "line_height_mode", defaults.get("line_height_mode", 0)))
 	defaults["charset_preset"] = int(cfg.get_value(SETTINGS_TTF_SECTION, "charset_preset", defaults.get("charset_preset", 0)))
 	defaults["charset"] = str(cfg.get_value(SETTINGS_TTF_SECTION, "charset", defaults.get("charset", " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~")))
 	# Backward compat: old configs had gradient_dir but no fill_mode.
@@ -214,6 +199,7 @@ func _save_ttf_import_settings(opts: Dictionary) -> void:
 	cfg.set_value(SETTINGS_TTF_SECTION, "proc_color", (opts.get("proc_color", Color.WHITE) as Color).to_html())
 	cfg.set_value(SETTINGS_TTF_SECTION, "padding", int(opts.get("padding", 0)))
 	cfg.set_value(SETTINGS_TTF_SECTION, "pack_tiebreaker", int(opts.get("pack_tiebreaker", 0)))
+	cfg.set_value(SETTINGS_TTF_SECTION, "line_height_mode", int(opts.get("line_height_mode", 0)))
 	cfg.set_value(SETTINGS_TTF_SECTION, "charset_preset", int(opts.get("charset_preset", 0)))
 	cfg.set_value(SETTINGS_TTF_SECTION, "charset", str(opts.get("charset", "")))
 	cfg.save(SETTINGS_PATH)
@@ -237,22 +223,6 @@ func _apply_ui_tint() -> void:
 		status_lbl.add_theme_color_override("font_color", _status_normal_color())
 	if stats_lbl:
 		stats_lbl.add_theme_color_override("default_color", Color(0.9, 0.93, 0.98, 0.95))
-
-func _clear_ui_tint() -> void:
-	remove_theme_stylebox_override("panel")
-	_ui_tinted = false
-	if status_lbl:
-		status_lbl.remove_theme_color_override("font_color")
-	if stats_lbl:
-		stats_lbl.remove_theme_color_override("default_color")
-	if load_demo_lbl:
-		load_demo_lbl.remove_theme_color_override("font_color")
-	if apply_demo_lbl:
-		apply_demo_lbl.remove_theme_color_override("font_color")
-	if import_demo_lbl:
-		import_demo_lbl.remove_theme_color_override("font_color")
-	if preview_lbl:
-		preview_lbl.remove_theme_color_override("font_color")
 
 func _status_normal_color() -> Color:
 	if _ui_tinted:
@@ -332,6 +302,7 @@ func _bind_ui() -> void:
 	ttf_dialog.confirmed.connect(func():
 		var g := "Scroll/VBox/Grid/"
 		var preset_node := ttf_dialog.get_node_or_null(g + "CharsetPresetOption") as OptionButton
+		var line_h_node := ttf_dialog.get_node_or_null(g + "LineHeightOption") as OptionButton
 		var charset_preset := preset_node.get_selected_id() if preset_node else 0
 		var opts := {
 			"size": int((ttf_dialog.get_node(g + "SizeSpin") as SpinBox).value),
@@ -340,6 +311,7 @@ func _bind_ui() -> void:
 			"filter": 1 if (ttf_dialog.get_node(g + "FilterCheck") as CheckBox).button_pressed else 0,
 			"padding": int((ttf_dialog.get_node(g + "PaddingSpin") as SpinBox).value),
 			"pack_tiebreaker": 1 if (ttf_dialog.get_node(g + "TieBox/TieTallRadio") as CheckBox).button_pressed else 0,
+			"line_height_mode": line_h_node.get_selected_id() if line_h_node != null else 0,
 			"outline": int((ttf_dialog.get_node(g + "OutlineSpin") as SpinBox).value),
 			"outline_color": (ttf_dialog.get_node(g + "OutlineColorPicker") as ColorPickerButton).color,
 			"fill_mode": int((ttf_dialog.get_node(g + "FillOption") as OptionButton).get_selected_id()),
@@ -1001,8 +973,8 @@ func _detect_glyph_rects(img: Image) -> Array[Rect2i]:
 
 func _example_paths() -> Dictionary:
 	return {
-		1: "res://fnt/Venice16.fnt",
-		2: "res://fnt/Super12.fnt",
+		1: "res://Font/Venice16.fnt",
+		2: "res://Font/Super12.fnt",
 	}
 
 func _on_load_example(id: int) -> void:
@@ -1022,67 +994,6 @@ func _on_load_example(id: int) -> void:
 		if data == null or data.image == null:
 			_load_font(abs_path + ".txt")
 
-func _on_apply_example(idx: int) -> void:
-	# 0 none, 1 V@1,2 V@2,3 B@1,4 B@2
-	var theme_map := {
-		1: "res://theme/venice16_x1.tres",
-		2: "res://theme/venice16_x2.tres",
-		3: "res://theme/super12_x1.tres",
-		4: "res://theme/super12_x2.tres",
-	}
-	if idx == 0 or not theme_map.has(idx):
-		# None: use an empty theme so the editor shows Godot's default UI (not the project custom theme)
-		theme = Theme.new()
-		_clear_ui_tint()
-		_refresh_preview()
-		_save_apply_settings(0)
-		_set_status("Applied no theme (Godot default)")
-		return
-	var tpath: String = theme_map[idx]
-	var t: Theme = null
-	if ResourceLoader.exists(tpath):
-		t = load(tpath)
-	if t:
-		theme = t
-	else:
-		# fallback: build at runtime
-		t = Theme.new()
-		var fpath := "res://fnt/Venice16.fnt"
-		var sz := 16
-		match idx:
-			2: fpath = "res://fnt/Venice16.fnt"; sz = 32
-			3: fpath = "res://fnt/Super12.fnt"; sz = 12
-			4: fpath = "res://fnt/Super12.fnt"; sz = 24
-		if ResourceLoader.exists(fpath):
-			t.default_font = load(fpath)
-		t.default_font_size = sz
-		theme = t
-	_apply_ui_tint()
-	_refresh_preview()
-	_save_apply_settings(idx)
-	_set_status("Applied theme to root: %s" % tpath.get_file())
-
-func _load_apply_settings() -> void:
-	var cfg := ConfigFile.new()
-	var idx := 1
-	if cfg.load(SETTINGS_PATH) == OK:
-		idx = int(cfg.get_value(SETTINGS_UI_SECTION, SETTINGS_APPLY_DEMO_KEY, 1))
-	if apply_dd == null:
-		return
-	var sel := apply_dd.get_item_index(idx)
-	if sel < 0:
-		idx = 1
-		sel = apply_dd.get_item_index(idx)
-	if sel >= 0:
-		apply_dd.select(sel)
-	_on_apply_example(idx)
-
-func _save_apply_settings(idx: int) -> void:
-	var cfg := ConfigFile.new()
-	cfg.load(SETTINGS_PATH)
-	cfg.set_value(SETTINGS_UI_SECTION, SETTINGS_APPLY_DEMO_KEY, idx)
-	cfg.save(SETTINGS_PATH)
-
 func _show_ttf_options(font_path: String) -> void:
 	_ttf_font_path = font_path
 	var saved := _load_ttf_import_settings()
@@ -1098,6 +1009,9 @@ func _populate_ttf_dialog(saved: Dictionary) -> void:
 	(ttf_dialog.get_node(g + "FilterCheck") as CheckBox).button_pressed = int(saved.get("filter", 0)) == 1
 	(ttf_dialog.get_node(g + "PaddingSpin") as SpinBox).value = int(saved.get("padding", 0))
 	_set_ttf_tie_radio(int(saved.get("pack_tiebreaker", 0)))
+	var line_h_node := ttf_dialog.get_node_or_null(g + "LineHeightOption") as OptionButton
+	if line_h_node != null:
+		line_h_node.select(clampi(int(saved.get("line_height_mode", 0)), 0, maxi(0, line_h_node.item_count - 1)))
 	(ttf_dialog.get_node(g + "OutlineSpin") as SpinBox).value = int(saved.get("outline", 0))
 	(ttf_dialog.get_node(g + "OutlineColorPicker") as ColorPickerButton).color = saved.get("outline_color", Color.BLACK)
 	var fill := ttf_dialog.get_node(g + "FillOption") as OptionButton
@@ -1325,7 +1239,15 @@ func _import_ttf(font_path: String, opts: Dictionary) -> void:
 	_set_status("Packing font atlas...")
 	await get_tree().process_frame
 	var prefer_wide := int(opts.get("pack_tiebreaker", 0)) == 0
-	_pack_rendered_font(font_face, font_size, rendered, pad, filter_mode, prefer_wide, font_line_h, font_ascent)
+	var final_line_h := font_line_h
+	if int(opts.get("line_height_mode", 0)) == 1:
+		var tight_h := 0
+		for r in rendered:
+			if int(r.get("h", 0)) > 0:
+				tight_h = maxi(tight_h, int(r.get("oy", 0)) + int(r.get("h", 0)))
+		if tight_h > 0:
+			final_line_h = tight_h
+	_pack_rendered_font(font_face, font_size, rendered, pad, filter_mode, prefer_wide, final_line_h, font_ascent)
 	_generating_font = false
 	if open_btn:
 		open_btn.disabled = false

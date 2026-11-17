@@ -396,6 +396,19 @@ text = "Prefer wide"
 layout_mode = 2
 text = "Prefer tall"
 
+[node name="LineHeightModeLabel" type="Label" parent="TtfDialog/Scroll/VBox/Grid"]
+layout_mode = 2
+text = "Line height"
+
+[node name="LineHeightOption" type="OptionButton" parent="TtfDialog/Scroll/VBox/Grid"]
+layout_mode = 2
+selected = 0
+item_count = 2
+popup/item_0/text = "Font metrics"
+popup/item_0/id = 0
+popup/item_1/text = "Tight fit (lowest glyph)"
+popup/item_1/id = 1
+
 [node name="OutlineLabel" type="Label" parent="TtfDialog/Scroll/VBox/Grid" unique_id=697249002]
 layout_mode = 2
 text = "Outline (px)"
