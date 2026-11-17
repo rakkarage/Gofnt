@@ -29,6 +29,7 @@ var sel_id: int = -1
 var _updating_ui := false
 var _ui_tinted := false
 var _generating_font := false
+var _gen_pixel_perfect := false
 const STATUS_ERROR_COLOR := Color(1.0, 0.42, 0.42, 1.0)
 const STATUS_WARN_COLOR := Color(1.0, 0.82, 0.45, 1.0)
 
@@ -141,6 +142,7 @@ func _default_ttf_import_settings() -> Dictionary:
 	return {
 		"size": 16,
 		"filter": 0,
+		"pixel_perfect": true, # 1-bit rasterization (no grayscale AA) for pixel fonts
 		"outline": 0,
 		"outline_color": Color.BLACK,
 		"gradient_dir": 1,
@@ -162,6 +164,7 @@ func _load_ttf_import_settings() -> Dictionary:
 		return defaults
 	defaults["size"] = int(cfg.get_value(SETTINGS_TTF_SECTION, "size", defaults["size"]))
 	defaults["filter"] = int(cfg.get_value(SETTINGS_TTF_SECTION, "filter", defaults["filter"]))
+	defaults["pixel_perfect"] = bool(cfg.get_value(SETTINGS_TTF_SECTION, "pixel_perfect", defaults["pixel_perfect"]))
 	defaults["outline"] = int(cfg.get_value(SETTINGS_TTF_SECTION, "outline", defaults["outline"]))
 	defaults["outline_color"] = Color.from_string(str(cfg.get_value(SETTINGS_TTF_SECTION, "outline_color", defaults["outline_color"].to_html())), defaults["outline_color"])
 	defaults["gradient_dir"] = int(cfg.get_value(SETTINGS_TTF_SECTION, "gradient_dir", defaults["gradient_dir"]))
@@ -187,6 +190,7 @@ func _save_ttf_import_settings(opts: Dictionary) -> void:
 	cfg.load(SETTINGS_PATH)
 	cfg.set_value(SETTINGS_TTF_SECTION, "size", int(opts.get("size", 16)))
 	cfg.set_value(SETTINGS_TTF_SECTION, "filter", int(opts.get("filter", 0)))
+	cfg.set_value(SETTINGS_TTF_SECTION, "pixel_perfect", bool(opts.get("pixel_perfect", true)))
 	cfg.set_value(SETTINGS_TTF_SECTION, "outline", int(opts.get("outline", 0)))
 	cfg.set_value(SETTINGS_TTF_SECTION, "outline_color", (opts.get("outline_color", Color.BLACK) as Color).to_html())
 	cfg.set_value(SETTINGS_TTF_SECTION, "gradient_dir", int(opts.get("gradient_dir", 0)))
@@ -303,12 +307,14 @@ func _bind_ui() -> void:
 		var g := "Scroll/VBox/Grid/"
 		var preset_node := ttf_dialog.get_node_or_null(g + "CharsetPresetOption") as OptionButton
 		var line_h_node := ttf_dialog.get_node_or_null(g + "LineHeightOption") as OptionButton
+		var pp_node := ttf_dialog.get_node_or_null(g + "PixelPerfectCheck") as CheckBox
 		var charset_preset := preset_node.get_selected_id() if preset_node else 0
 		var opts := {
 			"size": int((ttf_dialog.get_node(g + "SizeSpin") as SpinBox).value),
 			"charset": (ttf_dialog.get_node(g + "CharsetEdit") as TextEdit).text,
 			"charset_preset": charset_preset,
 			"filter": 1 if (ttf_dialog.get_node(g + "FilterCheck") as CheckBox).button_pressed else 0,
+			"pixel_perfect": pp_node.button_pressed if pp_node != null else true,
 			"padding": int((ttf_dialog.get_node(g + "PaddingSpin") as SpinBox).value),
 			"pack_tiebreaker": 1 if (ttf_dialog.get_node(g + "TieBox/TieTallRadio") as CheckBox).button_pressed else 0,
 			"line_height_mode": line_h_node.get_selected_id() if line_h_node != null else 0,
@@ -1007,6 +1013,8 @@ func _populate_ttf_dialog(saved: Dictionary) -> void:
 	var g := "Scroll/VBox/Grid/"
 	(ttf_dialog.get_node(g + "SizeSpin") as SpinBox).value = int(saved.get("size", 16))
 	(ttf_dialog.get_node(g + "FilterCheck") as CheckBox).button_pressed = int(saved.get("filter", 0)) == 1
+	var pp := ttf_dialog.get_node_or_null(g + "PixelPerfectCheck") as CheckBox
+	if pp: pp.button_pressed = bool(saved.get("pixel_perfect", true))
 	(ttf_dialog.get_node(g + "PaddingSpin") as SpinBox).value = int(saved.get("padding", 0))
 	_set_ttf_tie_radio(int(saved.get("pack_tiebreaker", 0)))
 	var line_h_node := ttf_dialog.get_node_or_null(g + "LineHeightOption") as OptionButton
@@ -1035,6 +1043,8 @@ func _reset_ttf_dialog() -> void:
 	var g := "Scroll/VBox/Grid/"
 	(ttf_dialog.get_node(g + "SizeSpin") as SpinBox).value = int(defaults.get("size", 16))
 	(ttf_dialog.get_node(g + "FilterCheck") as CheckBox).button_pressed = int(defaults.get("filter", 0)) == 1
+	var pp := ttf_dialog.get_node_or_null(g + "PixelPerfectCheck") as CheckBox
+	if pp: pp.button_pressed = bool(defaults.get("pixel_perfect", true))
 	(ttf_dialog.get_node(g + "PaddingSpin") as SpinBox).value = int(defaults.get("padding", 0))
 	_set_ttf_tie_radio(int(defaults.get("pack_tiebreaker", 0)))
 	(ttf_dialog.get_node(g + "OutlineSpin") as SpinBox).value = int(defaults.get("outline", 0))
@@ -1090,6 +1100,7 @@ func _update_ttf_fill_visibility() -> void:
 
 func _import_ttf(font_path: String, opts: Dictionary) -> void:
 	_generating_font = true
+	_gen_pixel_perfect = bool(opts.get("pixel_perfect", true))
 	var open_btn := get_node_or_null("Main/Left/Toolbar/OpenBtn") as Button
 	if open_btn:
 		open_btn.disabled = true
@@ -1126,6 +1137,14 @@ func _import_ttf(font_path: String, opts: Dictionary) -> void:
 				open_btn.disabled = false
 			_set_status("Failed to load TTF/OTF: %s" % font_path, true); return
 		font.data = bytes
+	if _gen_pixel_perfect:
+		# 1-bit rasterization: this is what makes alagard-style pixel fonts come out crisp.
+		# Grayscale FreeType AA is what turns smooth-outline TTFs into a gray, "sloppy" atlas.
+		font.antialiasing = TextServer.FONT_ANTIALIASING_NONE
+		font.hinting = TextServer.HINTING_NORMAL
+		font.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_DISABLED
+		font.force_autohinter = false
+		font.clear_cache()
 	var charset_str := charset
 	if charset_preset == 0:
 		charset_str = ""
@@ -1202,6 +1221,8 @@ func _import_ttf(font_path: String, opts: Dictionary) -> void:
 			var tex := vp.get_texture()
 			if tex != null:
 				img = tex.get_image()
+			if img != null and _gen_pixel_perfect:
+				_snap_alpha_1bit(img)
 			if img != null:
 				var b := _alpha_bounds(img)
 				if b.size.x > 0 and b.size.y > 0:
@@ -1267,6 +1288,8 @@ func _render_ttf_glyph_layered(vp: SubViewport, ci: Control, font: Font, cp: int
 	var img_fill := fill_tex.get_image()
 	if img_fill == null:
 		return null
+	if _gen_pixel_perfect:
+		_snap_alpha_1bit(img_fill)
 	var fb := _alpha_bounds(img_fill)
 	if fb.size.x > 0 and fb.size.y > 0:
 		if fill_mode == 1:
@@ -1288,6 +1311,8 @@ func _render_ttf_glyph_layered(vp: SubViewport, ci: Control, font: Font, cp: int
 	var img_outline := out_tex.get_image()
 	if img_outline == null:
 		return img_fill
+	if _gen_pixel_perfect:
+		_snap_alpha_1bit(img_outline)
 
 	# Composite: outline underneath/around, effected fill on top.
 	var result := Image.create(img_fill.get_width(), img_fill.get_height(), false, img_fill.get_format())
@@ -1295,7 +1320,22 @@ func _render_ttf_glyph_layered(vp: SubViewport, ci: Control, font: Font, cp: int
 	var full := Rect2i(Vector2i.ZERO, img_fill.get_size())
 	result.blit_rect(img_outline, full, Vector2i.ZERO)
 	result.blend_rect(img_fill, full, Vector2i.ZERO)
+	if _gen_pixel_perfect:
+		_snap_alpha_1bit(result)
 	return result
+
+func _snap_alpha_1bit(img: Image) -> void:
+	# Force a strict 0/255 alpha so the packed atlas has no gray fringe pixels.
+	var w := img.get_width()
+	var h := img.get_height()
+	for y in h:
+		for x in w:
+			var p := img.get_pixel(x, y)
+			if p.a < 0.5:
+				if p.a > 0.0:
+					img.set_pixel(x, y, Color(p.r, p.g, p.b, 0.0))
+			else:
+				img.set_pixel(x, y, Color(p.r, p.g, p.b, 1.0))
 
 func _ttf_draw_glyph(ci: Control) -> void:
 	if not ci.has_meta("ds"): return
@@ -1533,7 +1573,8 @@ func _pack_rendered_font(font_face: String, font_size: int, rendered: Array, pad
 	_refresh_glyph_list(); _refresh_kern(); _refresh_stats()
 	_refresh_preview(); atlas.queue_redraw()
 	var filt_name := "Nearest" if filter_mode == 0 else "Linear"
-	_set_status("Imported TTF/OTF '%s' at size %d: %d glyphs rasterized (%s filter)" % [font_face, font_size, data.chars.size(), filt_name])
+	var bits_name := "1-bit" if _gen_pixel_perfect else "grayscale"
+	_set_status("Imported TTF/OTF '%s' at size %d: %d glyphs rasterized (%s, %s filter)" % [font_face, font_size, data.chars.size(), bits_name, filt_name])
 
 func _try_pack_ttf(glyphs: Array, W: int, H: int, pad: int) -> Array:
 	var x := pad; var y := pad; var row_h := 0

@@ -371,6 +371,15 @@ text = "Filter"
 layout_mode = 2
 text = "Smooth (linear)"
 
+[node name="PixelPerfectLabel" type="Label" parent="TtfDialog/Scroll/VBox/Grid"]
+layout_mode = 2
+text = "Rasterize"
+
+[node name="PixelPerfectCheck" type="CheckBox" parent="TtfDialog/Scroll/VBox/Grid"]
+layout_mode = 2
+tooltip_text = "Rasterize glyphs as 1-bit (no grayscale AA). Use for pixel fonts."
+text = "Pixel perfect (1-bit)"
+
 [node name="PaddingLabel" type="Label" parent="TtfDialog/Scroll/VBox/Grid" unique_id=296044283]
 layout_mode = 2
 text = "Padding (px)"
