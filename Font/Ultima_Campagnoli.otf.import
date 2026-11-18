@@ -2,13 +2,13 @@
 
 importer="font_data_dynamic"
 type="FontFile"
-uid="uid://bg1jm7xiw4mns"
-path="res://.godot/imported/Ultima_Campagnoli_bold.otf-506da35ffe19b0f7ec5578364aa00daf.fontdata"
+uid="uid://icur4fhcht4w"
+path="res://.godot/imported/Ultima_Campagnoli.otf-c9f4e096c2a117618a0113c2dc226662.fontdata"
 
 [deps]
 
-source_file="res://Font/Extra/Ultima_Campagnoli_bold.otf"
-dest_files=["res://.godot/imported/Ultima_Campagnoli_bold.otf-506da35ffe19b0f7ec5578364aa00daf.fontdata"]
+source_file="res://Font/Ultima_Campagnoli.otf"
+dest_files=["res://.godot/imported/Ultima_Campagnoli.otf-c9f4e096c2a117618a0113c2dc226662.fontdata"]
 
 [params]
 

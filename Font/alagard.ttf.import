@@ -2,13 +2,13 @@
 
 importer="font_data_dynamic"
 type="FontFile"
-uid="uid://dwhre7y1owxms"
-path="res://.godot/imported/VeniceClassic.ttf-00415dbb7ad80be1d310395b6f06598d.fontdata"
+uid="uid://brt1nxr3ade77"
+path="res://.godot/imported/alagard.ttf-67f937272a8fbe979b25e514ac500a88.fontdata"
 
 [deps]
 
-source_file="res://Font/Extra/VeniceClassic.ttf"
-dest_files=["res://.godot/imported/VeniceClassic.ttf-00415dbb7ad80be1d310395b6f06598d.fontdata"]
+source_file="res://Font/alagard.ttf"
+dest_files=["res://.godot/imported/alagard.ttf-67f937272a8fbe979b25e514ac500a88.fontdata"]
 
 [params]
 

@@ -2,13 +2,13 @@
 
 importer="font_data_dynamic"
 type="FontFile"
-uid="uid://cfiobaskpx6dg"
-path="res://.godot/imported/PixelFraktur.ttf-cc9726482649037dd32e08a43e03c257.fontdata"
+uid="uid://dwhre7y1owxms"
+path="res://.godot/imported/VeniceClassic.ttf-01756b27d0b6659407150e0239efcdc8.fontdata"
 
 [deps]
 
-source_file="res://Font/Extra/PixelFraktur.ttf"
-dest_files=["res://.godot/imported/PixelFraktur.ttf-cc9726482649037dd32e08a43e03c257.fontdata"]
+source_file="res://Font/VeniceClassic.ttf"
+dest_files=["res://.godot/imported/VeniceClassic.ttf-01756b27d0b6659407150e0239efcdc8.fontdata"]
 
 [params]
 

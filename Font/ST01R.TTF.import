@@ -2,13 +2,13 @@
 
 importer="font_data_dynamic"
 type="FontFile"
-uid="uid://brt1nxr3ade77"
-path="res://.godot/imported/alagard.ttf-d0322633f26f192c9768014c369716a5.fontdata"
+uid="uid://ctpp7kp50xa54"
+path="res://.godot/imported/ST01R.TTF-03c34fb5b2d634d46f0bb1ffa44f76ec.fontdata"
 
 [deps]
 
-source_file="res://Font/Extra/alagard.ttf"
-dest_files=["res://.godot/imported/alagard.ttf-d0322633f26f192c9768014c369716a5.fontdata"]
+source_file="res://Font/ST01R.TTF"
+dest_files=["res://.godot/imported/ST01R.TTF-03c34fb5b2d634d46f0bb1ffa44f76ec.fontdata"]
 
 [params]
 

@@ -2,13 +2,13 @@
 
 importer="font_data_dynamic"
 type="FontFile"
-uid="uid://icur4fhcht4w"
-path="res://.godot/imported/Ultima_Campagnoli.otf-d8adc7ff1b5e3945794962de47724eb4.fontdata"
+uid="uid://cfiobaskpx6dg"
+path="res://.godot/imported/PixelFraktur.ttf-ff1d7cdd22ed5264054f130490a7c908.fontdata"
 
 [deps]
 
-source_file="res://Font/Extra/Ultima_Campagnoli.otf"
-dest_files=["res://.godot/imported/Ultima_Campagnoli.otf-d8adc7ff1b5e3945794962de47724eb4.fontdata"]
+source_file="res://Font/PixelFraktur.ttf"
+dest_files=["res://.godot/imported/PixelFraktur.ttf-ff1d7cdd22ed5264054f130490a7c908.fontdata"]
 
 [params]
 

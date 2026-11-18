@@ -2,13 +2,13 @@
 
 importer="font_data_dynamic"
 type="FontFile"
-uid="uid://30qgra084hqi"
-path="res://.godot/imported/Cairopixel-G3DeP.ttf-4d9093467ebdf3981dca12d1139aac40.fontdata"
+uid="uid://dwx211e5lmcs7"
+path="res://.godot/imported/ST02R.TTF-f5b04b47e2e992c4e4462c038a7d4e0c.fontdata"
 
 [deps]
 
-source_file="res://Font/Extra/Cairopixel-G3DeP.ttf"
-dest_files=["res://.godot/imported/Cairopixel-G3DeP.ttf-4d9093467ebdf3981dca12d1139aac40.fontdata"]
+source_file="res://Font/ST02R.TTF"
+dest_files=["res://.godot/imported/ST02R.TTF-f5b04b47e2e992c4e4462c038a7d4e0c.fontdata"]
 
 [params]
 
