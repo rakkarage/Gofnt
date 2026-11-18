@@ -111,7 +111,7 @@ func _to_local_tex(p: Vector2) -> Vector2:
 
 func _glyph_rect(id: int) -> Rect2i:
 	var c: Dictionary = data.chars[id]
-	return Rect2i(int(c.get("x",0)), int(c.get("y",0)), int(c.get("width",0)), int(c.get("height",0)))
+	return Rect2i(int(c.get("x", 0)), int(c.get("y", 0)), int(c.get("width", 0)), int(c.get("height", 0)))
 
 func _set_glyph_rect(id: int, r: Rect2i) -> void:
 	var c: Dictionary = data.chars[id]
@@ -160,16 +160,16 @@ func _draw() -> void:
 
 func _handle_points(sr: Rect2) -> Array[Vector2]:
 	return [
-		sr.position, sr.position + Vector2(sr.size.x/2,0), sr.position + Vector2(sr.size.x,0),
-		sr.position + Vector2(0,sr.size.y/2), sr.position + sr.size/2, sr.position + Vector2(sr.size.x,sr.size.y/2),
-		sr.position + Vector2(0,sr.size.y), sr.position + Vector2(sr.size.x/2,sr.size.y), sr.end
+		sr.position, sr.position + Vector2(sr.size.x / 2, 0), sr.position + Vector2(sr.size.x, 0),
+		sr.position + Vector2(0, sr.size.y / 2), sr.position + sr.size / 2, sr.position + Vector2(sr.size.x, sr.size.y / 2),
+		sr.position + Vector2(0, sr.size.y), sr.position + Vector2(sr.size.x / 2, sr.size.y), sr.end
 	]
 
 func _hit_handle(sr: Rect2, p: Vector2) -> String:
 	var pts := _handle_points(sr)
-	var modes := ["nw","n","ne","w","move","e","sw","s","se"]
+	var modes := ["nw", "n", "ne", "w", "move", "e", "sw", "s", "se"]
 	for i in pts.size():
-		if Rect2(pts[i]-Vector2(HANDLE,HANDLE), Vector2(HANDLE*2,HANDLE*2)).has_point(p):
+		if Rect2(pts[i] - Vector2(HANDLE, HANDLE), Vector2(HANDLE * 2, HANDLE * 2)).has_point(p):
 			return modes[i]
 	if sr.has_point(p):
 		return "move"
@@ -226,7 +226,7 @@ func _gui_input(event: InputEvent) -> void:
 				var tp := _to_local_tex(mb.position)
 				if selected_id != -1 and data.chars.has(selected_id):
 					var r := _glyph_rect(selected_id)
-					var sr := Rect2(pan + Vector2(r.position)*zoom, Vector2(r.size)*zoom)
+					var sr := Rect2(pan + Vector2(r.position) * zoom, Vector2(r.size) * zoom)
 					var hm := _hit_handle(sr, mb.position)
 					if hm != "":
 						dragging = true; drag_mode = hm; drag_start_mouse = mb.position; drag_start_rect = r
@@ -272,12 +272,12 @@ func _gui_input(event: InputEvent) -> void:
 			# hover cursor
 			if selected_id != -1 and data.chars.has(selected_id):
 				var r := _glyph_rect(selected_id)
-				var sr := Rect2(pan + Vector2(r.position)*zoom, Vector2(r.size)*zoom)
+				var sr := Rect2(pan + Vector2(r.position) * zoom, Vector2(r.size) * zoom)
 				var hm := _hit_handle(sr, mm.position)
 				match hm:
 					"move": mouse_default_cursor_shape = Control.CURSOR_MOVE
-					"n","s": mouse_default_cursor_shape = Control.CURSOR_VSIZE
-					"e","w": mouse_default_cursor_shape = Control.CURSOR_HSIZE
-					"nw","se": mouse_default_cursor_shape = Control.CURSOR_FDIAGSIZE
-					"ne","sw": mouse_default_cursor_shape = Control.CURSOR_BDIAGSIZE
+					"n", "s": mouse_default_cursor_shape = Control.CURSOR_VSIZE
+					"e", "w": mouse_default_cursor_shape = Control.CURSOR_HSIZE
+					"nw", "se": mouse_default_cursor_shape = Control.CURSOR_FDIAGSIZE
+					"ne", "sw": mouse_default_cursor_shape = Control.CURSOR_BDIAGSIZE
 					_: mouse_default_cursor_shape = Control.CURSOR_ARROW

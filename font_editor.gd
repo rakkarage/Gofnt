@@ -1176,7 +1176,7 @@ func _import_ttf(font_path: String, opts: Dictionary) -> void:
 		font_descent = int(ceil(font.get_descent(font_size)))
 	elif font.has_method("get_font_descent"):
 		font_descent = int(ceil(font.get_font_descent(font_size)))
-	var font_line_h := maxi(font_size, font_ascent + font_descent)
+	var metrics_line_h := maxi(font_size, font_ascent + font_descent)
 	var entries: Array = []
 	# collect metrics using font
 	for cp in order:
@@ -1260,7 +1260,7 @@ func _import_ttf(font_path: String, opts: Dictionary) -> void:
 	_set_status("Packing font atlas...")
 	await get_tree().process_frame
 	var prefer_wide := int(opts.get("pack_tiebreaker", 0)) == 0
-	var final_line_h := font_line_h
+	var final_line_h := metrics_line_h
 	if int(opts.get("line_height_mode", 0)) == 1:
 		var tight_h := 0
 		for r in rendered:

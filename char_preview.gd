@@ -52,7 +52,7 @@ func _layout_rows() -> Array:
 		return rows
 	var pad := 8
 	var x := pad
-	var max_w := maxi(40.0, size.x - pad)
+	var max_w := maxi(40, int(size.x) - pad)
 	var row: Array = []
 	for id in ids:
 		var c: Dictionary = data.chars[id]
