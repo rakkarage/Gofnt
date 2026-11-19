@@ -18,36 +18,10 @@ func clear() -> void:
 func load_fnt(path: String) -> Error:
 	clear()
 	fnt_path = path
-	var text := ""
 	var f := FileAccess.open(path, FileAccess.READ)
-	if f != null:
-		text = f.get_as_text()
-	else:
-		# In exports, .fnt sources may be imported as FontFile resources (not kept as raw files).
-		# Try common raw-text fallbacks for bundled demos.
-		var err := FileAccess.get_open_error()
-		var candidates: PackedStringArray = []
-		if path.begins_with("res://") and path.ends_with(".fnt"):
-			candidates.append(path + ".txt")
-			candidates.append(path.get_basename() + ".txt")
-		var loaded := false
-		for cand in candidates:
-			if FileAccess.file_exists(cand):
-				var cf := FileAccess.open(cand, FileAccess.READ)
-				if cf != null:
-					fnt_path = cand
-					text = cf.get_as_text()
-					loaded = true
-					break
-		if not loaded:
-			# Last resort: if bytes are available, try decoding as text.
-			if FileAccess.file_exists(path):
-				var bytes := FileAccess.get_file_as_bytes(path)
-				if not bytes.is_empty():
-					text = bytes.get_string_from_utf8()
-					loaded = true
-		if not loaded:
-			return err
+	if f == null:
+		return FileAccess.get_open_error()
+	var text := f.get_as_text()
 	if text.strip_edges().begins_with("<"):
 		return _parse_xml(text)
 	return _parse_text(text)
@@ -127,8 +101,6 @@ func _load_page_image() -> Error:
 	image_path = fnt_path.get_base_dir().path_join(file)
 	image = _load_image_compat(image_path)
 	if image == null:
-		image = _load_image_compat(fnt_path.get_base_dir().path_join(file))
-	if image == null:
 		# Last resort for web/packed exports: extract the atlas image from the
 		# imported FontFile resource (which is always available when .fnt is).
 		image = _load_image_from_fontfile(fnt_path)
@@ -144,43 +116,28 @@ func _load_image_compat(path: String) -> Image:
 		return null
 	if path.begins_with("res://"):
 		# Web/packed exports: prefer ResourceLoader for imported textures/resources.
-		var candidates: PackedStringArray = [path]
-		# Workarounds for export filters/packaging quirks: allow atlas bytes under alternate names.
-		for suffix: String in [".txt", ".bytes", ".png", ".bin"]:
-			var alt: String = path + suffix
-			if not candidates.has(alt):
-				candidates.append(alt)
-		if path.get_extension().to_lower() == "png":
-			var noext := path.get_basename()
-			for alt: String in [noext + ".png.txt", noext + ".bin", noext + ".bytes"]:
-				if not candidates.has(alt):
-					candidates.append(alt)
-		for p in candidates:
-			var res = null
-			if ResourceLoader.exists(p):
-				res = ResourceLoader.load(p)
-			if res == null:
-				res = load(p)
-			if res is Texture2D:
-				var tex_img := (res as Texture2D).get_image()
-				if tex_img != null:
-					return tex_img.duplicate()
-			elif res is Image:
-				return (res as Image).duplicate()
-		for p in candidates:
-			var bytes := FileAccess.get_file_as_bytes(p)
-			if bytes.is_empty():
-				continue
-			var lower := p.to_lower()
-			# try formats based on candidate and original path
+		var res = null
+		if ResourceLoader.exists(path):
+			res = ResourceLoader.load(path)
+		if res == null:
+			res = load(path)
+		if res is Texture2D:
+			var tex_img := (res as Texture2D).get_image()
+			if tex_img != null:
+				return tex_img.duplicate()
+		elif res is Image:
+			return (res as Image).duplicate()
+		var bytes := FileAccess.get_file_as_bytes(path)
+		if not bytes.is_empty():
 			var fmts: PackedStringArray = []
-			if lower.ends_with(".png") or path.to_lower().ends_with(".png"):
+			var lower := path.to_lower()
+			if lower.ends_with(".png"):
 				fmts.append("png")
-			if lower.ends_with(".webp") or path.to_lower().ends_with(".webp"):
+			if lower.ends_with(".webp"):
 				fmts.append("webp")
-			if lower.ends_with(".jpg") or lower.ends_with(".jpeg") or path.to_lower().ends_with(".jpg") or path.to_lower().ends_with(".jpeg"):
+			if lower.ends_with(".jpg") or lower.ends_with(".jpeg"):
 				fmts.append("jpg")
-			if lower.ends_with(".bmp") or path.to_lower().ends_with(".bmp"):
+			if lower.ends_with(".bmp"):
 				fmts.append("bmp")
 			if fmts.is_empty():
 				fmts = PackedStringArray(["png", "webp", "jpg", "bmp"])
@@ -193,16 +150,6 @@ func _load_image_compat(path: String) -> Image:
 					"jpg": err = img_tmp.load_jpg_from_buffer(bytes)
 					"bmp": err = img_tmp.load_bmp_from_buffer(bytes)
 				if err == OK:
-					return img_tmp
-			# last-chance generic attempts
-			for try_fmt in ["png", "webp", "jpg", "bmp"]:
-				var e2 := ERR_FILE_UNRECOGNIZED
-				match try_fmt:
-					"png": e2 = img_tmp.load_png_from_buffer(bytes)
-					"webp": e2 = img_tmp.load_webp_from_buffer(bytes)
-					"jpg": e2 = img_tmp.load_jpg_from_buffer(bytes)
-					"bmp": e2 = img_tmp.load_bmp_from_buffer(bytes)
-				if e2 == OK:
 					return img_tmp
 		# Fallback for editor/desktop cases.
 		var abs_path := ProjectSettings.globalize_path(path)
@@ -217,33 +164,20 @@ func _load_image_compat(path: String) -> Image:
 	return img
 
 func _load_image_from_fontfile(path: String) -> Image:
-	if path.is_empty():
+	if path.is_empty() or not ResourceLoader.exists(path):
 		return null
-	var candidates: PackedStringArray = []
-	if path.ends_with(".txt"):
-		candidates.append(path.substr(0, path.length() - 4))
-	else:
-		candidates.append(path)
-	# Also try a .fnt sibling in case fnt_path points at a raw text copy.
-	var base := path.get_basename()
-	if not base.ends_with(".fnt"):
-		candidates.append(base + ".fnt")
-	for cp in candidates:
-		if cp.is_empty():
+	var res = ResourceLoader.load(path)
+	if res is not FontFile:
+		return null
+	var ff := res as FontFile
+	for sz in [0, 8, 12, 16, 24, 32]:
+		var cnt := ff.get_texture_count(0, Vector2i(sz, 0))
+		if cnt <= 0:
 			continue
-		if not ResourceLoader.exists(cp):
-			continue
-		var res = ResourceLoader.load(cp)
-		if res is FontFile:
-			var ff := res as FontFile
-			for sz in [0, 8, 12, 16, 24, 32]:
-				var cnt := ff.get_texture_count(0, Vector2i(sz, 0))
-				if cnt <= 0:
-					continue
-				for ti in range(cnt):
-					var img := ff.get_texture_image(0, Vector2i(sz, 0), ti)
-					if img != null:
-						return img.duplicate()
+		for ti in range(cnt):
+			var img := ff.get_texture_image(0, Vector2i(sz, 0), ti)
+			if img != null:
+				return img.duplicate()
 	return null
 
 func sorted_char_ids() -> Array:

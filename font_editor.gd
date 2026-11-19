@@ -1095,29 +1095,6 @@ func _detect_glyph_rects(img: Image) -> Array[Rect2i]:
 			rects.append(Rect2i(minx, miny, maxx - minx + 1, maxy - miny + 1))
 	return rects
 
-func _example_paths() -> Dictionary:
-	return {
-		1: "res://Font/Venice16.fnt",
-		2: "res://Font/Super12.fnt",
-	}
-
-func _on_load_example(id: int) -> void:
-	if id <= 0: return
-	var path: String = _example_paths().get(id, "")
-	if path == "": return
-	# Prefer the res:// path directly (works in editor and packed/web exports).
-	_load_font(path)
-	if data == null or data.image == null:
-		# Export fallback: .fnt may be imported as a Font resource, so load raw text copy if bundled.
-		_load_font(path + ".txt")
-	if data == null or data.image == null:
-		# Desktop fallback in case a globalized path is needed.
-		var abs_path := ProjectSettings.globalize_path(path)
-		if abs_path != path:
-			_load_font(abs_path)
-		if data == null or data.image == null:
-			_load_font(abs_path + ".txt")
-
 func _show_ttf_options(font_path: String) -> void:
 	_ttf_font_path = font_path
 	var saved := _load_ttf_import_settings()
