@@ -195,7 +195,7 @@ func _save_ttf_import_settings(opts: Dictionary) -> void:
 	cfg.set_value(SETTINGS_TTF_SECTION, "outline_color", (opts.get("outline_color", Color.BLACK) as Color).to_html())
 	cfg.set_value(SETTINGS_TTF_SECTION, "gradient_dir", int(opts.get("gradient_dir", 0)))
 	cfg.set_value(SETTINGS_TTF_SECTION, "gradient_color1", (opts.get("gradient_color1", Color.WHITE) as Color).to_html())
-	cfg.set_value(SETTINGS_TTF_SECTION, "gradient_color2", (opts.get("gradient_color2", Color.WHITE) as Color).to_html())
+	cfg.set_value(SETTINGS_TTF_SECTION, "gradient_color2", (opts.get("gradient_color2", Color(0.7, 0.85, 1.0, 1.0)) as Color).to_html())
 	cfg.set_value(SETTINGS_TTF_SECTION, "fill_mode", int(opts.get("fill_mode", 0)))
 	cfg.set_value(SETTINGS_TTF_SECTION, "stamp_path", str(opts.get("stamp_path", "")))
 	cfg.set_value(SETTINGS_TTF_SECTION, "stamp_tile", bool(opts.get("stamp_tile", true)))
@@ -247,6 +247,141 @@ func _set_status(t: String, is_error: bool = false, is_warn: bool = false) -> vo
 	else:
 		status_lbl.remove_theme_color_override("font_color")
 
+func _ttf(path: String) -> Node:
+	# All TTF dialog controls live under this root; keep path changes in one place.
+	return ttf_dialog.get_node_or_null("Scroll/VBox/" + path)
+
+func _collect_ttf_options() -> Dictionary:
+	var fill_g := "FillGrid/"
+	var preset_node := _ttf("CharsGrid/CharsetPresetOption") as OptionButton
+	var line_h_node := _ttf("RasterGrid/LineHeightOption") as OptionButton
+	var pp_node := _ttf("RasterGrid/PixelPerfectCheck") as CheckBox
+	var tall_node := _ttf("RasterGrid/TieBox/TieTallRadio") as CheckBox
+	return {
+		"size": int((_ttf("RasterGrid/SizeSpin") as SpinBox).value),
+		"charset": (_ttf("CharsGrid/CharsetEdit") as TextEdit).text,
+		"charset_preset": preset_node.get_selected_id() if preset_node else 0,
+		"filter": 1 if (_ttf("RasterGrid/FilterCheck") as CheckBox).button_pressed else 0,
+		"pixel_perfect": pp_node.button_pressed if pp_node else true,
+		"padding": int((_ttf("RasterGrid/PaddingSpin") as SpinBox).value),
+		"pack_tiebreaker": 1 if tall_node != null and tall_node.button_pressed else 0,
+		"line_height_mode": line_h_node.get_selected_id() if line_h_node else 0,
+		"outline": int((_ttf("OutlineGrid/OutlineSpin") as SpinBox).value),
+		"outline_color": (_ttf("OutlineGrid/OutlineColorPicker") as ColorPickerButton).color,
+		"fill_mode": (_ttf(fill_g + "FillOption") as OptionButton).get_selected_id(),
+		"gradient_dir": (_ttf(fill_g + "GradientOption") as OptionButton).get_selected_id(),
+		"gradient_color1": (_ttf(fill_g + "GradFromPicker") as ColorPickerButton).color,
+		"gradient_color2": (_ttf(fill_g + "GradToPicker") as ColorPickerButton).color,
+		"proc_effect": (_ttf(fill_g + "ProcEffectOption") as OptionButton).get_selected_id(),
+		"proc_color": (_ttf(fill_g + "ProcColorPicker") as ColorPickerButton).color,
+	}
+
+func _wire_ttf_preview() -> void:
+	# Every control feeds the swatch / hint so the dialog reacts instantly.
+	var root := ttf_dialog.get_node_or_null("Scroll/VBox")
+	if root != null:
+		_wire_ttf_preview_node(root)
+
+func _wire_ttf_preview_node(n: Node) -> void:
+	var cb := Callable(self, "_refresh_ttf_preview")
+	if n is SpinBox:
+		var spin_sig := (n as SpinBox).value_changed
+		if not spin_sig.is_connected(cb): spin_sig.connect(cb)
+	elif n is OptionButton:
+		var opt_sig := (n as OptionButton).item_selected
+		if not opt_sig.is_connected(cb): opt_sig.connect(cb)
+	elif n is CheckBox:
+		var check_sig := (n as CheckBox).toggled
+		if not check_sig.is_connected(cb): check_sig.connect(cb)
+	elif n is ColorPickerButton:
+		var color_sig := (n as ColorPickerButton).color_changed
+		if not color_sig.is_connected(cb): color_sig.connect(cb)
+	elif n is TextEdit:
+		var text_sig := (n as TextEdit).text_changed
+		if not text_sig.is_connected(cb): text_sig.connect(cb)
+	for c in n.get_children():
+		_wire_ttf_preview_node(c)
+
+func _refresh_ttf_preview(_ignored: Variant = null) -> void:
+	var p := _ttf("Header/HeaderMargin/HeaderRow/Preview")
+	if p == null:
+		return
+	var fg := "FillGrid/"
+	var fill := _ttf(fg + "FillOption") as OptionButton
+	var grad := _ttf(fg + "GradientOption") as OptionButton
+	var proc := _ttf(fg + "ProcEffectOption") as OptionButton
+	var outline := _ttf("OutlineGrid/OutlineSpin") as SpinBox
+	p.set("fill_mode", fill.get_selected_id() if fill else 0)
+	p.set("gradient_dir", grad.get_selected_id() if grad else 1)
+	p.set("color1", (_ttf(fg + "GradFromPicker") as ColorPickerButton).color)
+	p.set("color2", (_ttf(fg + "GradToPicker") as ColorPickerButton).color)
+	p.set("proc_effect", proc.get_selected_id() if proc else 0)
+	p.set("proc_color", (_ttf(fg + "ProcColorPicker") as ColorPickerButton).color)
+	p.set("outline_px", int(outline.value) if outline else 0)
+	p.set("outline_color", (_ttf("OutlineGrid/OutlineColorPicker") as ColorPickerButton).color)
+	p.queue_redraw()
+	_update_ttf_hint()
+
+func _update_ttf_hint() -> void:
+	var lbl := _ttf("InfoLabel") as Label
+	if lbl == null:
+		return
+	var fill := _ttf("FillGrid/FillOption") as OptionButton
+	var mode := fill.get_selected_id() if fill else 0
+	var msg := ""
+	match mode:
+		0: msg = "Solid: glyph pixels use a flat color — crisp and compact."
+		1: msg = "Gradient: colors are baked across every glyph in the atlas."
+		2: msg = "Procedural: scanlines, dither and noise are baked into glyph pixels."
+	var pp := _ttf("RasterGrid/PixelPerfectCheck") as CheckBox
+	if pp != null and pp.button_pressed:
+		msg += "  Pixel-perfect rasterization keeps edges sharp."
+	lbl.text = msg
+
+func _style_ttf_dialog() -> void:
+	if ttf_dialog.get_meta("ttf_styled", false):
+		return
+	ttf_dialog.set_meta("ttf_styled", true)
+	var ok := ttf_dialog.get_ok_button()
+	if ok != null:
+		ok.text = "  Import font  "
+		var normal := StyleBoxFlat.new()
+		normal.bg_color = Color(0.32, 0.62, 0.96, 1.0)
+		normal.set_corner_radius_all(5)
+		normal.content_margin_left = 10.0
+		normal.content_margin_right = 10.0
+		ok.add_theme_stylebox_override("normal", normal)
+		var hover := normal.duplicate() as StyleBoxFlat
+		hover.bg_color = Color(0.44, 0.74, 1.0, 1.0)
+		ok.add_theme_stylebox_override("hover", hover)
+		var pressed := normal.duplicate() as StyleBoxFlat
+		pressed.bg_color = Color(0.20, 0.46, 0.80, 1.0)
+		ok.add_theme_stylebox_override("pressed", pressed)
+		ok.add_theme_color_override("font_color", Color(0.04, 0.09, 0.15, 1.0))
+		ok.add_theme_color_override("font_hover_color", Color(0.02, 0.06, 0.12, 1.0))
+
+func _animate_ttf_dialog() -> void:
+	if Engine.is_editor_hint():
+		return
+	var root := ttf_dialog.get_node_or_null("Scroll/VBox") as Control
+	if root == null or not is_inside_tree():
+		return
+	root.modulate.a = 0.0
+	root.pivot_offset = Vector2(root.size.x * 0.5, 32.0)
+	root.scale = Vector2(0.985, 0.985)
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(root, "modulate:a", 1.0, 0.18).set_ease(Tween.EASE_OUT)
+	tw.tween_property(root, "scale", Vector2.ONE, 0.22).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	var i := 0
+	for n in ["RasterTitle", "OutlineTitle", "FillTitle", "CharsTitle", "InfoLabel", "Footer"]:
+		var c := _ttf(n) as Control
+		if c == null:
+			continue
+		c.modulate.a = 0.0
+		tw.tween_property(c, "modulate:a", 1.0, 0.16).set_delay(0.04 * float(i))
+		i += 1
+
 func _bind_ui() -> void:
 	# Scene provides nodes; wire signals here.
 	var tabs := $Main/Tabs as TabContainer
@@ -296,37 +431,20 @@ func _bind_ui() -> void:
 	var kern_remove := $Main/Tabs/Kerning/KernRemoveBtn as Button
 	kern_remove.pressed.connect(_remove_kern)
 
-	# TTF import dialog
+	# TTF import dialog — wired, skinned and live-previewed
 	ttf_dialog.canceled.connect(func(): ttf_dialog.hide())
-	var ttf_reset_btn := ttf_dialog.get_node("Scroll/VBox/ResetBtn") as Button
+	var ttf_reset_btn := _ttf("Footer/ResetBtn") as Button
 	ttf_reset_btn.pressed.connect(_reset_ttf_dialog)
-	var ttf_fill := ttf_dialog.get_node("Scroll/VBox/Grid/FillOption") as OptionButton
-	ttf_fill.item_selected.connect(func(_i): _update_ttf_fill_visibility())
+	var ttf_fill := _ttf("FillGrid/FillOption") as OptionButton
+	ttf_fill.item_selected.connect(func(_i):
+		_update_ttf_fill_visibility()
+		_update_ttf_hint()
+	)
 	_setup_ttf_tie_radios()
+	_wire_ttf_preview()
+	_style_ttf_dialog()
 	ttf_dialog.confirmed.connect(func():
-		var g := "Scroll/VBox/Grid/"
-		var preset_node := ttf_dialog.get_node_or_null(g + "CharsetPresetOption") as OptionButton
-		var line_h_node := ttf_dialog.get_node_or_null(g + "LineHeightOption") as OptionButton
-		var pp_node := ttf_dialog.get_node_or_null(g + "PixelPerfectCheck") as CheckBox
-		var charset_preset := preset_node.get_selected_id() if preset_node else 0
-		var opts := {
-			"size": int((ttf_dialog.get_node(g + "SizeSpin") as SpinBox).value),
-			"charset": (ttf_dialog.get_node(g + "CharsetEdit") as TextEdit).text,
-			"charset_preset": charset_preset,
-			"filter": 1 if (ttf_dialog.get_node(g + "FilterCheck") as CheckBox).button_pressed else 0,
-			"pixel_perfect": pp_node.button_pressed if pp_node != null else true,
-			"padding": int((ttf_dialog.get_node(g + "PaddingSpin") as SpinBox).value),
-			"pack_tiebreaker": 1 if (ttf_dialog.get_node(g + "TieBox/TieTallRadio") as CheckBox).button_pressed else 0,
-			"line_height_mode": line_h_node.get_selected_id() if line_h_node != null else 0,
-			"outline": int((ttf_dialog.get_node(g + "OutlineSpin") as SpinBox).value),
-			"outline_color": (ttf_dialog.get_node(g + "OutlineColorPicker") as ColorPickerButton).color,
-			"fill_mode": int((ttf_dialog.get_node(g + "FillOption") as OptionButton).get_selected_id()),
-			"gradient_dir": int((ttf_dialog.get_node(g + "GradientOption") as OptionButton).get_selected_id()),
-			"gradient_color1": (ttf_dialog.get_node(g + "GradFromPicker") as ColorPickerButton).color,
-			"gradient_color2": (ttf_dialog.get_node(g + "GradToPicker") as ColorPickerButton).color,
-			"proc_effect": int((ttf_dialog.get_node(g + "ProcEffectOption") as OptionButton).get_selected_id()),
-			"proc_color": (ttf_dialog.get_node(g + "ProcColorPicker") as ColorPickerButton).color,
-		}
+		var opts := _collect_ttf_options()
 		_save_ttf_import_settings(opts)
 		ttf_dialog.hide()
 		_import_ttf(_ttf_font_path, opts)
@@ -1004,67 +1122,76 @@ func _show_ttf_options(font_path: String) -> void:
 	_ttf_font_path = font_path
 	var saved := _load_ttf_import_settings()
 	_populate_ttf_dialog(saved)
+	var name_lbl := _ttf("Header/HeaderMargin/HeaderRow/HeaderText/FontName") as Label
+	if name_lbl != null:
+		name_lbl.text = font_path.get_file()
+	var preview := _ttf("Header/HeaderMargin/HeaderRow/Preview")
+	if preview != null:
+		var fnt := FontFile.new()
+		preview.set("font", fnt if fnt.load_dynamic_font(font_path) == OK else null)
+		preview.set("sample_text", "Ag")
+	_refresh_ttf_preview()
 	var vp_size := get_viewport_rect().size
-	var target_w := mini(700, int(vp_size.x * 0.92))
-	var target_h := mini(700, int(vp_size.y * 0.92))
-	ttf_dialog.popup_centered(Vector2i(maxi(target_w, 360), maxi(target_h, 320)))
+	var target_w := mini(720, int(vp_size.x * 0.92))
+	var target_h := mini(840, int(vp_size.y * 0.92))
+	ttf_dialog.popup_centered(Vector2i(maxi(target_w, 520), maxi(target_h, 460)))
+	_animate_ttf_dialog()
 
 func _populate_ttf_dialog(saved: Dictionary) -> void:
-	var g := "Scroll/VBox/Grid/"
-	(ttf_dialog.get_node(g + "SizeSpin") as SpinBox).value = int(saved.get("size", 16))
-	(ttf_dialog.get_node(g + "FilterCheck") as CheckBox).button_pressed = int(saved.get("filter", 0)) == 1
-	var pp := ttf_dialog.get_node_or_null(g + "PixelPerfectCheck") as CheckBox
-	if pp: pp.button_pressed = bool(saved.get("pixel_perfect", true))
-	(ttf_dialog.get_node(g + "PaddingSpin") as SpinBox).value = int(saved.get("padding", 0))
+	(_ttf("RasterGrid/SizeSpin") as SpinBox).value = int(saved.get("size", 16))
+	(_ttf("RasterGrid/FilterCheck") as CheckBox).button_pressed = int(saved.get("filter", 0)) == 1
+	var pp := _ttf("RasterGrid/PixelPerfectCheck") as CheckBox
+	if pp != null: pp.button_pressed = bool(saved.get("pixel_perfect", true))
+	(_ttf("RasterGrid/PaddingSpin") as SpinBox).value = int(saved.get("padding", 0))
 	_set_ttf_tie_radio(int(saved.get("pack_tiebreaker", 0)))
-	var line_h_node := ttf_dialog.get_node_or_null(g + "LineHeightOption") as OptionButton
+	var line_h_node := _ttf("RasterGrid/LineHeightOption") as OptionButton
 	if line_h_node != null:
 		line_h_node.select(clampi(int(saved.get("line_height_mode", 0)), 0, maxi(0, line_h_node.item_count - 1)))
-	(ttf_dialog.get_node(g + "OutlineSpin") as SpinBox).value = int(saved.get("outline", 0))
-	(ttf_dialog.get_node(g + "OutlineColorPicker") as ColorPickerButton).color = saved.get("outline_color", Color.BLACK)
-	var fill := ttf_dialog.get_node(g + "FillOption") as OptionButton
+	(_ttf("OutlineGrid/OutlineSpin") as SpinBox).value = int(saved.get("outline", 0))
+	(_ttf("OutlineGrid/OutlineColorPicker") as ColorPickerButton).color = saved.get("outline_color", Color.BLACK)
+	var fill := _ttf("FillGrid/FillOption") as OptionButton
 	fill.select(clampi(int(saved.get("fill_mode", 0)), 0, 2))
-	var grad := ttf_dialog.get_node(g + "GradientOption") as OptionButton
+	var grad := _ttf("FillGrid/GradientOption") as OptionButton
 	grad.select(clampi(int(saved.get("gradient_dir", 1)) - 1, 0, 3))
-	(ttf_dialog.get_node(g + "GradFromPicker") as ColorPickerButton).color = saved.get("gradient_color1", Color.WHITE)
-	(ttf_dialog.get_node(g + "GradToPicker") as ColorPickerButton).color = saved.get("gradient_color2", Color(0.7, 0.85, 1.0, 1.0))
-	var proc := ttf_dialog.get_node(g + "ProcEffectOption") as OptionButton
+	(_ttf("FillGrid/GradFromPicker") as ColorPickerButton).color = saved.get("gradient_color1", Color.WHITE)
+	(_ttf("FillGrid/GradToPicker") as ColorPickerButton).color = saved.get("gradient_color2", Color(0.7, 0.85, 1.0, 1.0))
+	var proc := _ttf("FillGrid/ProcEffectOption") as OptionButton
 	proc.select(clampi(int(saved.get("proc_effect", 0)), 0, 4))
-	(ttf_dialog.get_node(g + "ProcColorPicker") as ColorPickerButton).color = saved.get("proc_color", Color.WHITE)
-	var preset_node := ttf_dialog.get_node_or_null(g + "CharsetPresetOption") as OptionButton
-	if preset_node:
+	(_ttf("FillGrid/ProcColorPicker") as ColorPickerButton).color = saved.get("proc_color", Color.WHITE)
+	var preset_node := _ttf("CharsGrid/CharsetPresetOption") as OptionButton
+	if preset_node != null:
 		preset_node.select(clampi(int(saved.get("charset_preset", 0)), 0, 2))
-	(ttf_dialog.get_node(g + "CharsetEdit") as TextEdit).text = str(saved.get("charset", " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"))
+	(_ttf("CharsGrid/CharsetEdit") as TextEdit).text = str(saved.get("charset", " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"))
 	_update_ttf_fill_visibility()
 
 func _reset_ttf_dialog() -> void:
 	var defaults := _default_ttf_import_settings()
-	# apply defaults for colors etc already in defaults
-	var g := "Scroll/VBox/Grid/"
-	(ttf_dialog.get_node(g + "SizeSpin") as SpinBox).value = int(defaults.get("size", 16))
-	(ttf_dialog.get_node(g + "FilterCheck") as CheckBox).button_pressed = int(defaults.get("filter", 0)) == 1
-	var pp := ttf_dialog.get_node_or_null(g + "PixelPerfectCheck") as CheckBox
-	if pp: pp.button_pressed = bool(defaults.get("pixel_perfect", true))
-	(ttf_dialog.get_node(g + "PaddingSpin") as SpinBox).value = int(defaults.get("padding", 0))
+	(_ttf("RasterGrid/SizeSpin") as SpinBox).value = int(defaults.get("size", 16))
+	(_ttf("RasterGrid/FilterCheck") as CheckBox).button_pressed = int(defaults.get("filter", 0)) == 1
+	var pp := _ttf("RasterGrid/PixelPerfectCheck") as CheckBox
+	if pp != null: pp.button_pressed = bool(defaults.get("pixel_perfect", true))
+	(_ttf("RasterGrid/PaddingSpin") as SpinBox).value = int(defaults.get("padding", 0))
 	_set_ttf_tie_radio(int(defaults.get("pack_tiebreaker", 0)))
-	(ttf_dialog.get_node(g + "OutlineSpin") as SpinBox).value = int(defaults.get("outline", 0))
-	(ttf_dialog.get_node(g + "OutlineColorPicker") as ColorPickerButton).color = defaults.get("outline_color", Color.BLACK)
-	(ttf_dialog.get_node(g + "FillOption") as OptionButton).select(clampi(int(defaults.get("fill_mode", 0)), 0, 2))
-	(ttf_dialog.get_node(g + "GradientOption") as OptionButton).select(clampi(int(defaults.get("gradient_dir", 1)) - 1, 0, 3))
-	(ttf_dialog.get_node(g + "GradFromPicker") as ColorPickerButton).color = defaults.get("gradient_color1", Color.WHITE)
-	(ttf_dialog.get_node(g + "GradToPicker") as ColorPickerButton).color = defaults.get("gradient_color2", Color(0.7, 0.85, 1.0, 1.0))
-	(ttf_dialog.get_node(g + "ProcEffectOption") as OptionButton).select(clampi(int(defaults.get("proc_effect", 0)), 0, 4))
-	(ttf_dialog.get_node(g + "ProcColorPicker") as ColorPickerButton).color = defaults.get("proc_color", Color.WHITE)
-	var preset_node := ttf_dialog.get_node_or_null(g + "CharsetPresetOption") as OptionButton
-	if preset_node:
-		preset_node.select(0)
-	(ttf_dialog.get_node(g + "CharsetEdit") as TextEdit).text = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+	var line_h_node := _ttf("RasterGrid/LineHeightOption") as OptionButton
+	if line_h_node != null: line_h_node.select(0)
+	(_ttf("OutlineGrid/OutlineSpin") as SpinBox).value = int(defaults.get("outline", 0))
+	(_ttf("OutlineGrid/OutlineColorPicker") as ColorPickerButton).color = defaults.get("outline_color", Color.BLACK)
+	(_ttf("FillGrid/FillOption") as OptionButton).select(clampi(int(defaults.get("fill_mode", 0)), 0, 2))
+	(_ttf("FillGrid/GradientOption") as OptionButton).select(clampi(int(defaults.get("gradient_dir", 1)) - 1, 0, 3))
+	(_ttf("FillGrid/GradFromPicker") as ColorPickerButton).color = defaults.get("gradient_color1", Color.WHITE)
+	(_ttf("FillGrid/GradToPicker") as ColorPickerButton).color = defaults.get("gradient_color2", Color(0.7, 0.85, 1.0, 1.0))
+	(_ttf("FillGrid/ProcEffectOption") as OptionButton).select(clampi(int(defaults.get("proc_effect", 0)), 0, 4))
+	(_ttf("FillGrid/ProcColorPicker") as ColorPickerButton).color = defaults.get("proc_color", Color.WHITE)
+	var preset_node := _ttf("CharsGrid/CharsetPresetOption") as OptionButton
+	if preset_node != null: preset_node.select(0)
+	(_ttf("CharsGrid/CharsetEdit") as TextEdit).text = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
 	_update_ttf_fill_visibility()
+	_refresh_ttf_preview()
 
 func _setup_ttf_tie_radios() -> void:
-	var g := "Scroll/VBox/Grid/TieBox/"
-	var wide := ttf_dialog.get_node_or_null(g + "TieWideRadio") as CheckBox
-	var tall := ttf_dialog.get_node_or_null(g + "TieTallRadio") as CheckBox
+	var g := "RasterGrid/TieBox/"
+	var wide := _ttf(g + "TieWideRadio") as CheckBox
+	var tall := _ttf(g + "TieTallRadio") as CheckBox
 	if wide == null or tall == null:
 		return
 	if wide.button_group == null:
@@ -1074,27 +1201,26 @@ func _setup_ttf_tie_radios() -> void:
 
 func _set_ttf_tie_radio(v: int) -> void:
 	_setup_ttf_tie_radios()
-	var g := "Scroll/VBox/Grid/TieBox/"
-	var wide := ttf_dialog.get_node_or_null(g + "TieWideRadio") as CheckBox
-	var tall := ttf_dialog.get_node_or_null(g + "TieTallRadio") as CheckBox
+	var g := "RasterGrid/TieBox/"
+	var wide := _ttf(g + "TieWideRadio") as CheckBox
+	var tall := _ttf(g + "TieTallRadio") as CheckBox
 	if wide == null or tall == null:
 		return
 	tall.button_pressed = v == 1
 	wide.button_pressed = v != 1
 
 func _update_ttf_fill_visibility() -> void:
-	var g := "Scroll/VBox/Grid/"
-	var fill := ttf_dialog.get_node_or_null(g + "FillOption") as OptionButton
+	var fill := _ttf("FillGrid/FillOption") as OptionButton
 	if fill == null:
 		return
 	var mode := fill.get_selected_id()
 	var is_grad := mode == 1
 	var is_proc := mode == 2
 	for n in ["GradientLabel", "GradientOption", "GradFromLabel", "GradFromPicker", "GradToLabel", "GradToPicker"]:
-		var node := ttf_dialog.get_node_or_null(g + n) as CanvasItem
+		var node := _ttf("FillGrid/" + n) as CanvasItem
 		if node: node.visible = is_grad
 	for n in ["ProcEffectLabel", "ProcEffectOption", "ProcColorLabel", "ProcColorPicker"]:
-		var node := ttf_dialog.get_node_or_null(g + n) as CanvasItem
+		var node := _ttf("FillGrid/" + n) as CanvasItem
 		if node: node.visible = is_proc
 
 

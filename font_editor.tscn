@@ -3,6 +3,7 @@
 [ext_resource type="Script" uid="uid://ci23ybeyqwbpu" path="res://font_editor.gd" id="1_66v0l"]
 [ext_resource type="Script" uid="uid://ukdsevt6ri0t" path="res://atlas_view.gd" id="2_wuqaj"]
 [ext_resource type="Script" path="res://char_preview.gd" id="3_cprev"]
+[ext_resource type="Script" path="res://ttf_preview.gd" id="4_ttfprev"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_66v0l"]
 content_margin_left = 0.0
@@ -19,6 +20,62 @@ corner_radius_top_left = 3
 corner_radius_top_right = 3
 corner_radius_bottom_right = 3
 corner_radius_bottom_left = 3
+corner_detail = 5
+
+[sub_resource type="StyleBoxFlat" id="SB_TtfDialog"]
+bg_color = Color(0.075, 0.088, 0.115, 0.98)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.45, 0.72, 1, 0.38)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+corner_detail = 5
+content_margin_left = 10.0
+content_margin_top = 10.0
+content_margin_right = 10.0
+content_margin_bottom = 10.0
+
+[sub_resource type="StyleBoxFlat" id="SB_TtfHeader"]
+bg_color = Color(0.115, 0.15, 0.21, 1)
+border_width_left = 3
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.45, 0.72, 1, 0.55)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+corner_detail = 5
+
+[sub_resource type="StyleBoxFlat" id="SB_TtfReset"]
+bg_color = Color(0.14, 0.18, 0.24, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.45, 0.72, 1, 0.28)
+corner_radius_top_left = 5
+corner_radius_top_right = 5
+corner_radius_bottom_right = 5
+corner_radius_bottom_left = 5
+corner_detail = 5
+
+[sub_resource type="StyleBoxFlat" id="SB_TtfResetHover"]
+bg_color = Color(0.18, 0.26, 0.36, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.45, 0.72, 1, 0.65)
+corner_radius_top_left = 5
+corner_radius_top_right = 5
+corner_radius_bottom_right = 5
+corner_radius_bottom_left = 5
 corner_detail = 5
 
 [node name="Gofnt" type="PanelContainer" unique_id=1027870048]
@@ -336,10 +393,13 @@ layout_mode = 2
 text = "Remove sel"
 
 [node name="TtfDialog" type="AcceptDialog" parent="." unique_id=596652813]
-title = "Import TTF/OTF"
+title = "Import TTF / OTF"
 dialog_hide_on_ok = false
+custom_minimum_size = Vector2(560, 420)
+theme_override_styles/panel = SubResource("SB_TtfDialog")
 
 [node name="Scroll" type="ScrollContainer" parent="TtfDialog" unique_id=1843036406]
+layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 horizontal_scroll_mode = 0
@@ -348,68 +408,92 @@ horizontal_scroll_mode = 0
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
+theme_override_constants/separation = 8
 
-[node name="Grid" type="GridContainer" parent="TtfDialog/Scroll/VBox" unique_id=1416180853]
+[node name="Header" type="PanelContainer" parent="TtfDialog/Scroll/VBox"]
+layout_mode = 2
+theme_override_styles/panel = SubResource("SB_TtfHeader")
+
+[node name="HeaderMargin" type="MarginContainer" parent="TtfDialog/Scroll/VBox/Header"]
+layout_mode = 2
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 11
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 11
+
+[node name="HeaderRow" type="HBoxContainer" parent="TtfDialog/Scroll/VBox/Header/HeaderMargin"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="HeaderText" type="VBoxContainer" parent="TtfDialog/Scroll/VBox/Header/HeaderMargin/HeaderRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+theme_override_constants/separation = 2
+
+[node name="Eyebrow" type="Label" parent="TtfDialog/Scroll/VBox/Header/HeaderMargin/HeaderRow/HeaderText"]
+layout_mode = 2
+text = "FONT IMPORTER   /   TTF  •  OTF"
+theme_override_colors/font_color = Color(0.45, 0.72, 1, 1)
+theme_override_font_sizes/font_size = 10
+
+[node name="Title" type="Label" parent="TtfDialog/Scroll/VBox/Header/HeaderMargin/HeaderRow/HeaderText"]
+layout_mode = 2
+text = "Rasterize a vector font"
+theme_override_colors/font_color = Color(0.96, 0.975, 1, 1)
+theme_override_font_sizes/font_size = 18
+
+[node name="FontName" type="Label" parent="TtfDialog/Scroll/VBox/Header/HeaderMargin/HeaderRow/HeaderText"]
+layout_mode = 2
+text = "—"
+tooltip_text = "The font file selected in Open."
+autowrap_mode = 3
+theme_override_colors/font_color = Color(0.72, 0.84, 1, 1)
+theme_override_font_sizes/font_size = 12
+
+[node name="SubTitle" type="Label" parent="TtfDialog/Scroll/VBox/Header/HeaderMargin/HeaderRow/HeaderText"]
+layout_mode = 2
+text = "Bake outlines, fills and effects into a bitmap atlas."
+autowrap_mode = 3
+theme_override_colors/font_color = Color(0.58, 0.66, 0.78, 1)
+theme_override_font_sizes/font_size = 11
+
+[node name="Preview" type="Control" parent="TtfDialog/Scroll/VBox/Header/HeaderMargin/HeaderRow"]
+custom_minimum_size = Vector2(190, 96)
+layout_mode = 2
+size_flags_vertical = 4
+script = ExtResource("4_ttfprev")
+
+[node name="RasterTitle" type="Label" parent="TtfDialog/Scroll/VBox"]
+layout_mode = 2
+text = "▌  01   RASTER"
+theme_override_colors/font_color = Color(0.45, 0.72, 1, 1)
+theme_override_font_sizes/font_size = 12
+
+[node name="RasterGrid" type="GridContainer" parent="TtfDialog/Scroll/VBox"]
 layout_mode = 2
 columns = 2
+theme_override_constants/h_separation = 16
+theme_override_constants/v_separation = 4
 
-[node name="SizeLabel" type="Label" parent="TtfDialog/Scroll/VBox/Grid" unique_id=1705671464]
+[node name="SizeLabel" type="Label" parent="TtfDialog/Scroll/VBox/RasterGrid"]
 layout_mode = 2
-text = "Size"
+text = "Size (px)"
+tooltip_text = " Glyph raster size in pixels."
+theme_override_colors/font_color = Color(0.82, 0.87, 0.95, 1)
 
-[node name="SizeSpin" type="SpinBox" parent="TtfDialog/Scroll/VBox/Grid" unique_id=1854100227]
+[node name="SizeSpin" type="SpinBox" parent="TtfDialog/Scroll/VBox/RasterGrid"]
 layout_mode = 2
 min_value = 6.0
 max_value = 128.0
 value = 16.0
 
-[node name="FilterLabel" type="Label" parent="TtfDialog/Scroll/VBox/Grid" unique_id=1262653240]
-layout_mode = 2
-text = "Filter"
-
-[node name="FilterCheck" type="CheckBox" parent="TtfDialog/Scroll/VBox/Grid" unique_id=999909260]
-layout_mode = 2
-text = "Smooth (linear)"
-
-[node name="PixelPerfectLabel" type="Label" parent="TtfDialog/Scroll/VBox/Grid"]
-layout_mode = 2
-text = "Rasterize"
-
-[node name="PixelPerfectCheck" type="CheckBox" parent="TtfDialog/Scroll/VBox/Grid"]
-layout_mode = 2
-tooltip_text = "Rasterize glyphs as 1-bit (no grayscale AA). Use for pixel fonts."
-text = "Pixel perfect (1-bit)"
-
-[node name="PaddingLabel" type="Label" parent="TtfDialog/Scroll/VBox/Grid" unique_id=296044283]
-layout_mode = 2
-text = "Padding (px)"
-
-[node name="PaddingSpin" type="SpinBox" parent="TtfDialog/Scroll/VBox/Grid" unique_id=818738266]
-layout_mode = 2
-tooltip_text = "Atlas gap between packed glyphs (0 disables)"
-max_value = 32.0
-
-[node name="TieLabel" type="Label" parent="TtfDialog/Scroll/VBox/Grid" unique_id=1160782290]
-layout_mode = 2
-text = "Atlas tiebreaker"
-
-[node name="TieBox" type="HBoxContainer" parent="TtfDialog/Scroll/VBox/Grid" unique_id=274454078]
-layout_mode = 2
-
-[node name="TieWideRadio" type="CheckBox" parent="TtfDialog/Scroll/VBox/Grid/TieBox" unique_id=274454079]
-layout_mode = 2
-button_pressed = true
-text = "Prefer wide"
-
-[node name="TieTallRadio" type="CheckBox" parent="TtfDialog/Scroll/VBox/Grid/TieBox" unique_id=274454080]
-layout_mode = 2
-text = "Prefer tall"
-
-[node name="LineHeightModeLabel" type="Label" parent="TtfDialog/Scroll/VBox/Grid"]
+[node name="LineHeightModeLabel" type="Label" parent="TtfDialog/Scroll/VBox/RasterGrid"]
 layout_mode = 2
 text = "Line height"
+theme_override_colors/font_color = Color(0.82, 0.87, 0.95, 1)
 
-[node name="LineHeightOption" type="OptionButton" parent="TtfDialog/Scroll/VBox/Grid"]
+[node name="LineHeightOption" type="OptionButton" parent="TtfDialog/Scroll/VBox/RasterGrid"]
 layout_mode = 2
 selected = 0
 item_count = 2
@@ -418,27 +502,113 @@ popup/item_0/id = 0
 popup/item_1/text = "Tight fit (lowest glyph)"
 popup/item_1/id = 1
 
-[node name="OutlineLabel" type="Label" parent="TtfDialog/Scroll/VBox/Grid" unique_id=697249002]
+[node name="FilterLabel" type="Label" parent="TtfDialog/Scroll/VBox/RasterGrid"]
+layout_mode = 2
+text = "Filtering"
+theme_override_colors/font_color = Color(0.82, 0.87, 0.95, 1)
+
+[node name="FilterCheck" type="CheckBox" parent="TtfDialog/Scroll/VBox/RasterGrid"]
+layout_mode = 2
+tooltip_text = "Linear texture filtering for smooth scaling. Pixel fonts usually want this off."
+text = "Smooth (linear)"
+
+[node name="PixelPerfectLabel" type="Label" parent="TtfDialog/Scroll/VBox/RasterGrid"]
+layout_mode = 2
+text = "Rasterize"
+theme_override_colors/font_color = Color(0.82, 0.87, 0.95, 1)
+
+[node name="PixelPerfectCheck" type="CheckBox" parent="TtfDialog/Scroll/VBox/RasterGrid"]
+layout_mode = 2
+tooltip_text = "Rasterize glyphs as 1-bit (no grayscale AA). Use for pixel fonts."
+text = "Pixel perfect (1-bit)"
+
+[node name="PaddingLabel" type="Label" parent="TtfDialog/Scroll/VBox/RasterGrid"]
+layout_mode = 2
+text = "Atlas padding"
+theme_override_colors/font_color = Color(0.82, 0.87, 0.95, 1)
+
+[node name="PaddingSpin" type="SpinBox" parent="TtfDialog/Scroll/VBox/RasterGrid"]
+layout_mode = 2
+tooltip_text = "Atlas gap between packed glyphs (0 disables)."
+max_value = 32.0
+
+[node name="TieLabel" type="Label" parent="TtfDialog/Scroll/VBox/RasterGrid"]
+layout_mode = 2
+text = "Atlas shape"
+tooltip_text = "Which dimension wins when glyph packing ties."
+theme_override_colors/font_color = Color(0.82, 0.87, 0.95, 1)
+
+[node name="TieBox" type="HBoxContainer" parent="TtfDialog/Scroll/VBox/RasterGrid"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="TieWideRadio" type="CheckBox" parent="TtfDialog/Scroll/VBox/RasterGrid/TieBox"]
+layout_mode = 2
+button_pressed = true
+text = "Prefer wide"
+
+[node name="TieTallRadio" type="CheckBox" parent="TtfDialog/Scroll/VBox/RasterGrid/TieBox"]
+layout_mode = 2
+text = "Prefer tall"
+
+[node name="Sep1" type="ColorRect" parent="TtfDialog/Scroll/VBox"]
+custom_minimum_size = Vector2(0, 1)
+layout_mode = 2
+color = Color(0.45, 0.72, 1, 0.18)
+
+[node name="OutlineTitle" type="Label" parent="TtfDialog/Scroll/VBox"]
+layout_mode = 2
+text = "▌  02   OUTLINE"
+theme_override_colors/font_color = Color(0.45, 0.72, 1, 1)
+theme_override_font_sizes/font_size = 12
+
+[node name="OutlineGrid" type="GridContainer" parent="TtfDialog/Scroll/VBox"]
+layout_mode = 2
+columns = 2
+theme_override_constants/h_separation = 16
+theme_override_constants/v_separation = 4
+
+[node name="OutlineLabel" type="Label" parent="TtfDialog/Scroll/VBox/OutlineGrid"]
 layout_mode = 2
 text = "Outline (px)"
+theme_override_colors/font_color = Color(0.82, 0.87, 0.95, 1)
 
-[node name="OutlineSpin" type="SpinBox" parent="TtfDialog/Scroll/VBox/Grid" unique_id=828982366]
+[node name="OutlineSpin" type="SpinBox" parent="TtfDialog/Scroll/VBox/OutlineGrid"]
 layout_mode = 2
 max_value = 8.0
 
-[node name="OutlineColorLabel" type="Label" parent="TtfDialog/Scroll/VBox/Grid" unique_id=1482539991]
+[node name="OutlineColorLabel" type="Label" parent="TtfDialog/Scroll/VBox/OutlineGrid"]
 layout_mode = 2
 text = "Outline color"
+theme_override_colors/font_color = Color(0.82, 0.87, 0.95, 1)
 
-[node name="OutlineColorPicker" type="ColorPickerButton" parent="TtfDialog/Scroll/VBox/Grid" unique_id=96838815]
-custom_minimum_size = Vector2(120, 0)
+[node name="OutlineColorPicker" type="ColorPickerButton" parent="TtfDialog/Scroll/VBox/OutlineGrid"]
+custom_minimum_size = Vector2(120, 28)
 layout_mode = 2
 
-[node name="FillLabel" type="Label" parent="TtfDialog/Scroll/VBox/Grid" unique_id=1803906800]
+[node name="Sep2" type="ColorRect" parent="TtfDialog/Scroll/VBox"]
+custom_minimum_size = Vector2(0, 1)
 layout_mode = 2
-text = "Fill"
+color = Color(0.45, 0.72, 1, 0.18)
 
-[node name="FillOption" type="OptionButton" parent="TtfDialog/Scroll/VBox/Grid" unique_id=1630650027]
+[node name="FillTitle" type="Label" parent="TtfDialog/Scroll/VBox"]
+layout_mode = 2
+text = "▌  03   FILL"
+theme_override_colors/font_color = Color(0.45, 0.72, 1, 1)
+theme_override_font_sizes/font_size = 12
+
+[node name="FillGrid" type="GridContainer" parent="TtfDialog/Scroll/VBox"]
+layout_mode = 2
+columns = 2
+theme_override_constants/h_separation = 16
+theme_override_constants/v_separation = 4
+
+[node name="FillLabel" type="Label" parent="TtfDialog/Scroll/VBox/FillGrid"]
+layout_mode = 2
+text = "Fill style"
+theme_override_colors/font_color = Color(0.82, 0.87, 0.95, 1)
+
+[node name="FillOption" type="OptionButton" parent="TtfDialog/Scroll/VBox/FillGrid"]
 layout_mode = 2
 selected = 0
 item_count = 3
@@ -449,11 +619,12 @@ popup/item_1/id = 1
 popup/item_2/text = "Procedural"
 popup/item_2/id = 2
 
-[node name="GradientLabel" type="Label" parent="TtfDialog/Scroll/VBox/Grid" unique_id=1879690312]
+[node name="GradientLabel" type="Label" parent="TtfDialog/Scroll/VBox/FillGrid"]
 layout_mode = 2
-text = "Gradient"
+text = "Direction"
+theme_override_colors/font_color = Color(0.82, 0.87, 0.95, 1)
 
-[node name="GradientOption" type="OptionButton" parent="TtfDialog/Scroll/VBox/Grid" unique_id=1645035925]
+[node name="GradientOption" type="OptionButton" parent="TtfDialog/Scroll/VBox/FillGrid"]
 layout_mode = 2
 selected = 0
 item_count = 4
@@ -466,29 +637,32 @@ popup/item_2/id = 3
 popup/item_3/text = "Diagonal (TR-BL)"
 popup/item_3/id = 4
 
-[node name="GradFromLabel" type="Label" parent="TtfDialog/Scroll/VBox/Grid" unique_id=800652804]
+[node name="GradFromLabel" type="Label" parent="TtfDialog/Scroll/VBox/FillGrid"]
 layout_mode = 2
-text = "Gradient from"
+text = "From color"
+theme_override_colors/font_color = Color(0.82, 0.87, 0.95, 1)
 
-[node name="GradFromPicker" type="ColorPickerButton" parent="TtfDialog/Scroll/VBox/Grid" unique_id=315772624]
-custom_minimum_size = Vector2(120, 0)
+[node name="GradFromPicker" type="ColorPickerButton" parent="TtfDialog/Scroll/VBox/FillGrid"]
+custom_minimum_size = Vector2(120, 28)
 layout_mode = 2
 color = Color(1, 1, 1, 1)
 
-[node name="GradToLabel" type="Label" parent="TtfDialog/Scroll/VBox/Grid" unique_id=1458172515]
+[node name="GradToLabel" type="Label" parent="TtfDialog/Scroll/VBox/FillGrid"]
 layout_mode = 2
-text = "Gradient to"
+text = "To color"
+theme_override_colors/font_color = Color(0.82, 0.87, 0.95, 1)
 
-[node name="GradToPicker" type="ColorPickerButton" parent="TtfDialog/Scroll/VBox/Grid" unique_id=1986546404]
-custom_minimum_size = Vector2(120, 0)
+[node name="GradToPicker" type="ColorPickerButton" parent="TtfDialog/Scroll/VBox/FillGrid"]
+custom_minimum_size = Vector2(120, 28)
 layout_mode = 2
 color = Color(0.7, 0.85, 1, 1)
 
-[node name="ProcEffectLabel" type="Label" parent="TtfDialog/Scroll/VBox/Grid" unique_id=1347823264]
+[node name="ProcEffectLabel" type="Label" parent="TtfDialog/Scroll/VBox/FillGrid"]
 layout_mode = 2
-text = "Procedural effect"
+text = "Effect"
+theme_override_colors/font_color = Color(0.82, 0.87, 0.95, 1)
 
-[node name="ProcEffectOption" type="OptionButton" parent="TtfDialog/Scroll/VBox/Grid" unique_id=1688003437]
+[node name="ProcEffectOption" type="OptionButton" parent="TtfDialog/Scroll/VBox/FillGrid"]
 layout_mode = 2
 selected = 0
 item_count = 5
@@ -503,20 +677,39 @@ popup/item_3/id = 3
 popup/item_4/text = "Edge tint / bevel"
 popup/item_4/id = 4
 
-[node name="ProcColorLabel" type="Label" parent="TtfDialog/Scroll/VBox/Grid" unique_id=122642782]
+[node name="ProcColorLabel" type="Label" parent="TtfDialog/Scroll/VBox/FillGrid"]
 layout_mode = 2
-text = "Procedural color"
+text = "Tint"
+theme_override_colors/font_color = Color(0.82, 0.87, 0.95, 1)
 
-[node name="ProcColorPicker" type="ColorPickerButton" parent="TtfDialog/Scroll/VBox/Grid" unique_id=1577165104]
-custom_minimum_size = Vector2(120, 0)
+[node name="ProcColorPicker" type="ColorPickerButton" parent="TtfDialog/Scroll/VBox/FillGrid"]
+custom_minimum_size = Vector2(120, 28)
 layout_mode = 2
 color = Color(1, 1, 1, 1)
 
-[node name="CharsetPresetLabel" type="Label" parent="TtfDialog/Scroll/VBox/Grid"]
+[node name="Sep3" type="ColorRect" parent="TtfDialog/Scroll/VBox"]
+custom_minimum_size = Vector2(0, 1)
 layout_mode = 2
-text = "Characters"
+color = Color(0.45, 0.72, 1, 0.18)
 
-[node name="CharsetPresetOption" type="OptionButton" parent="TtfDialog/Scroll/VBox/Grid"]
+[node name="CharsTitle" type="Label" parent="TtfDialog/Scroll/VBox"]
+layout_mode = 2
+text = "▌  04   CHARACTERS"
+theme_override_colors/font_color = Color(0.45, 0.72, 1, 1)
+theme_override_font_sizes/font_size = 12
+
+[node name="CharsGrid" type="GridContainer" parent="TtfDialog/Scroll/VBox"]
+layout_mode = 2
+columns = 2
+theme_override_constants/h_separation = 16
+theme_override_constants/v_separation = 4
+
+[node name="CharsetPresetLabel" type="Label" parent="TtfDialog/Scroll/VBox/CharsGrid"]
+layout_mode = 2
+text = "Character set"
+theme_override_colors/font_color = Color(0.82, 0.87, 0.95, 1)
+
+[node name="CharsetPresetOption" type="OptionButton" parent="TtfDialog/Scroll/VBox/CharsGrid"]
 layout_mode = 2
 selected = 0
 item_count = 3
@@ -527,22 +720,43 @@ popup/item_1/id = 1
 popup/item_2/text = "Custom (text below)"
 popup/item_2/id = 2
 
-[node name="CharsetLabel" type="Label" parent="TtfDialog/Scroll/VBox/Grid" unique_id=2005267676]
+[node name="CharsetLabel" type="Label" parent="TtfDialog/Scroll/VBox/CharsGrid"]
 layout_mode = 2
-text = "Custom charset"
+text = "Custom chars"
+theme_override_colors/font_color = Color(0.82, 0.87, 0.95, 1)
 
-[node name="CharsetEdit" type="TextEdit" parent="TtfDialog/Scroll/VBox/Grid" unique_id=637876446]
-custom_minimum_size = Vector2(420, 110)
+[node name="CharsetEdit" type="TextEdit" parent="TtfDialog/Scroll/VBox/CharsGrid"]
+custom_minimum_size = Vector2(300, 72)
 layout_mode = 2
 tooltip_text = "Used when a custom charset is needed. For ASCII or All existing, the preset above controls generation."
 text = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
 wrap_mode = 1
 
-[node name="InfoLabel" type="Label" parent="TtfDialog/Scroll/VBox" unique_id=1355686895]
+[node name="InfoLabel" type="Label" parent="TtfDialog/Scroll/VBox"]
 layout_mode = 2
-text = "Rasterizes glyphs into a new bitmap atlas. Filter affects preview/texture sampling; outline, gradient, and procedural effects are baked into the atlas (tinting visible glyph pixels). Settings are remembered for next time."
+text = "Settings are remembered for the next import."
 autowrap_mode = 3
+theme_override_colors/font_color = Color(0.58, 0.66, 0.78, 1)
+theme_override_font_sizes/font_size = 11
 
-[node name="ResetBtn" type="Button" parent="TtfDialog/Scroll/VBox" unique_id=180755659]
+[node name="Footer" type="HBoxContainer" parent="TtfDialog/Scroll/VBox"]
 layout_mode = 2
-text = "Reset"
+theme_override_constants/separation = 10
+
+[node name="ResetBtn" type="Button" parent="TtfDialog/Scroll/VBox/Footer"]
+layout_mode = 2
+tooltip_text = "Restore every option to its default value."
+theme_override_styles/normal = SubResource("SB_TtfReset")
+theme_override_styles/hover = SubResource("SB_TtfResetHover")
+theme_override_colors/font_color = Color(0.78, 0.86, 0.96, 1)
+text = "↺  Reset defaults"
+
+[node name="FooterSpacer" type="Control" parent="TtfDialog/Scroll/VBox/Footer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="HintLbl" type="Label" parent="TtfDialog/Scroll/VBox/Footer"]
+layout_mode = 2
+text = "Import replaces the current font."
+theme_override_colors/font_color = Color(0.5, 0.58, 0.7, 1)
+theme_override_font_sizes/font_size = 10
