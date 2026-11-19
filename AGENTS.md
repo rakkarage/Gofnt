@@ -17,7 +17,6 @@
 
 - `*.gd.uid` sidecars exist and `font_editor.tscn` references some scripts via `uid://...`. Let Godot generate them; don't hand-edit UIDs or invent them for new scripts.
 - `.godot/` is gitignored generated editor/import cache (holds `global_script_class_cache.cfg`, which registers the `class_name` types). Don't commit it; if globals or resources look stale, reimport from the editor.
-- `project.godot` intentionally sets nearest texture filtering and 2D pixel snapping — this is a pixel-font editor, so pixelated rendering is correct; don't "fix" it.
 - Preferences persist at runtime to `user://settings.cfg` (fullscreen, TTF import options, file-dialog favorites). They are not in the repo; don't look for them in git.
 
 ## TTF import

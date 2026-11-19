@@ -11,13 +11,7 @@ config_version=5
 [application]
 
 config/name="Gofnt"
-config/tags=PackedStringArray("2d", "font", "pixel", "tool")
+config/tags=PackedStringArray("2d", "font", "editor", "generator", "tool")
 run/main_scene="res://font_editor.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 config/icon="res://icon.svg"
-
-[rendering]
-
-textures/canvas_textures/default_texture_filter=0
-2d/snapping/use_gpu_pixel_snap=true
-quality/2d/use_pixel_snap=true
