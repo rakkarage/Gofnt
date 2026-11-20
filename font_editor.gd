@@ -22,6 +22,7 @@ var prop_spin: Dictionary = {}
 @onready var font_base: SpinBox = $Main/Tabs/FontStats/FontGrid/FontBase
 @onready var glyph_action_btn: Button = $Main/Tabs/Glyph/GlyphActionBtn
 @onready var fullscreen_cb: CheckBox = $Main/Left/Toolbar/FullscreenCb
+@onready var repack_pad_spin: SpinBox = $Main/Left/Toolbar/RepackPadSpin
 var _ttf_font_path: String = ""
 @onready var ttf_dialog: AcceptDialog = $TtfDialog
 var preview_scale: float = 2.0
@@ -206,6 +207,14 @@ func _save_ttf_import_settings(opts: Dictionary) -> void:
 	cfg.set_value(SETTINGS_TTF_SECTION, "line_height_mode", int(opts.get("line_height_mode", 0)))
 	cfg.set_value(SETTINGS_TTF_SECTION, "charset_preset", int(opts.get("charset_preset", 0)))
 	cfg.set_value(SETTINGS_TTF_SECTION, "charset", str(opts.get("charset", "")))
+	cfg.save(SETTINGS_PATH)
+
+# Shared packing gap: the toolbar repack spin and the TTF import dialog edit the
+# same setting, so changing one is reflected by the other.
+func _save_padding_setting(pad: int) -> void:
+	var cfg := ConfigFile.new()
+	cfg.load(SETTINGS_PATH)
+	cfg.set_value(SETTINGS_TTF_SECTION, "padding", clampi(pad, 0, 32))
 	cfg.save(SETTINGS_PATH)
 
 func _apply_ui_tint() -> void:
@@ -395,6 +404,14 @@ func _bind_ui() -> void:
 	$Main/Left/Toolbar/TrimSelectedBtn.pressed.connect(_on_autoslice_selected)
 	$Main/Left/Toolbar/TrimAllBtn.pressed.connect(_on_autoslice_all)
 	$Main/Left/Toolbar/RepackBtn.pressed.connect(_on_repack)
+	if repack_pad_spin:
+		_updating_ui = true
+		repack_pad_spin.value = maxi(0, int(_load_ttf_import_settings().get("padding", 0)))
+		_updating_ui = false
+		repack_pad_spin.value_changed.connect(func(v):
+			if not _updating_ui:
+				_save_padding_setting(int(v))
+		)
 	fullscreen_cb.toggled.connect(func(pressed: bool): _set_fullscreen(pressed, true))
 
 	atlas.glyph_selected.connect(_on_glyph_selected)
@@ -447,6 +464,10 @@ func _bind_ui() -> void:
 		var opts := _collect_ttf_options()
 		_save_ttf_import_settings(opts)
 		ttf_dialog.hide()
+		if repack_pad_spin:
+			_updating_ui = true
+			repack_pad_spin.value = int(opts.get("padding", 0))
+			_updating_ui = false
 		_import_ttf(_ttf_font_path, opts)
 	)
 
@@ -873,6 +894,10 @@ func _do_save_png() -> void:
 func _on_repack() -> void:
 	if data == null or data.image == null: return
 	var pad := 0
+	if repack_pad_spin:
+		pad = maxi(0, int(repack_pad_spin.value))
+	else:
+		pad = maxi(0, int(_load_ttf_import_settings().get("padding", 0)))
 	var glyphs: Array = []
 	for id in data.sorted_char_ids():
 		var c: Dictionary = data.chars[id]
@@ -932,7 +957,10 @@ func _on_repack() -> void:
 	data.texture = ImageTexture.create_from_image(img)
 	data.common["scaleW"] = nw; data.common["scaleH"] = nh
 	atlas.queue_redraw(); _refresh_preview(); _refresh_stats()
-	_set_status("Repacked atlas to %dx%d (%d glyphs)" % [nw, nh, glyphs.size()])
+	var msg := "Repacked atlas to %dx%d (%d glyphs)" % [nw, nh, glyphs.size()]
+	if pad > 0:
+		msg += " (pad %d)" % pad
+	_set_status(msg)
 
 func _try_pack(glyphs: Array, W: int, H: int, pad: int) -> Array:
 	var x := pad; var y := pad; var row_h := 0

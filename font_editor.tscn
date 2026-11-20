@@ -124,6 +124,19 @@ layout_mode = 2
 tooltip_text = "Trim all glyph rects to non-transparent bounds (does not detect new glyphs)"
 text = "Trim all"
 
+[node name="RepackPadLabel" type="Label" parent="Main/Left/Toolbar"]
+layout_mode = 2
+tooltip_text = "Gap between packed glyphs when repacking an FNT (shared with TTF import)."
+text = "Pad:"
+theme_override_colors/font_color = Color(0.82, 0.87, 0.95, 1)
+
+[node name="RepackPadSpin" type="SpinBox" parent="Main/Left/Toolbar"]
+layout_mode = 2
+custom_minimum_size = Vector2(64, 0)
+tooltip_text = "Atlas gap between packed glyphs when repacking an FNT (0 disables). Shared with TTF import padding."
+min_value = 0.0
+max_value = 32.0
+
 [node name="RepackBtn" type="Button" parent="Main/Left/Toolbar" unique_id=66703233]
 layout_mode = 2
 tooltip_text = "Shelf-pack glyphs into a tighter power-of-two atlas"
