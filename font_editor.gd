@@ -1528,6 +1528,23 @@ func _import_ttf(font_path: String, opts: Dictionary) -> void:
 	await get_tree().process_frame
 	var prefer_wide := int(opts.get("pack_tiebreaker", 0)) == 0
 	var pack_algo := clampi(int(opts.get("pack_algo", 0)), 0, 2)
+	# BMFont's info tag records how the font was generated. Glyph rects are tight
+	# alpha bounds, and the Pad value leaves an empty gap outside each rect, so
+	# that gap is "spacing", not "padding" (which would be inside the rect).
+	var gen_info := {
+		"face": font_face,
+		"size": font_size,
+		"bold": 0,
+		"italic": 0,
+		"charset": "",
+		"unicode": 1,
+		"stretchH": 100,
+		"smooth": 0 if _gen_pixel_perfect else 1,
+		"aa": 1,
+		"padding": "0,0,0,0",
+		"spacing": "%d,%d" % [pad, pad],
+		"outline": outline_px,
+	}
 	var final_line_h := metrics_line_h
 	if int(opts.get("line_height_mode", 0)) == 1:
 		var tight_h := 0
@@ -1536,7 +1553,7 @@ func _import_ttf(font_path: String, opts: Dictionary) -> void:
 				tight_h = maxi(tight_h, int(r.get("oy", 0)) + int(r.get("h", 0)))
 		if tight_h > 0:
 			final_line_h = tight_h
-	_pack_rendered_font(font_face, font_size, rendered, pad, filter_mode, prefer_wide, final_line_h, font_ascent, pack_algo)
+	_pack_rendered_font(font_face, font_size, rendered, pad, filter_mode, prefer_wide, final_line_h, font_ascent, pack_algo, gen_info)
 	_generating_font = false
 	if open_btn:
 		open_btn.disabled = false
@@ -1768,7 +1785,7 @@ func _apply_procedural_to_bounds(img: Image, b: Rect2i, effect: int, tint: Color
 				out = Color(clampf(base.r * s, 0.0, 1.0), clampf(base.g * s, 0.0, 1.0), clampf(base.b * s, 0.0, 1.0), p.a)
 			img.set_pixel(x, y, out)
 
-func _pack_rendered_font(font_face: String, font_size: int, rendered: Array, pad: int, filter_mode: int = 0, prefer_wide: bool = true, line_h: int = -1, base: int = -1, algo: int = 0) -> void:
+func _pack_rendered_font(font_face: String, font_size: int, rendered: Array, pad: int, filter_mode: int = 0, prefer_wide: bool = true, line_h: int = -1, base: int = -1, algo: int = 0, gen_info: Dictionary = {}) -> void:
 	if line_h <= 0:
 		line_h = font_size
 	if base <= 0:
@@ -1817,7 +1834,7 @@ func _pack_rendered_font(font_face: String, font_size: int, rendered: Array, pad
 	data.image = img
 	data.image_path = ""
 	data.fnt_path = ""
-	data.info = {"face": font_face, "size": font_size}
+	data.info = gen_info if not gen_info.is_empty() else {"face": font_face, "size": font_size}
 	data.common = {"lineHeight": line_h, "base": base, "scaleW": nw, "scaleH": nh, "pages": 1}
 	data.pages = [ {"id": 0, "file": font_face + ".png"}]
 	for it in best.pos:
