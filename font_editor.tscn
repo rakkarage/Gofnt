@@ -137,9 +137,28 @@ tooltip_text = "Atlas gap between packed glyphs when repacking an FNT (0 disable
 min_value = 0.0
 max_value = 32.0
 
+[node name="PackAlgoLabel" type="Label" parent="Main/Left/Toolbar"]
+layout_mode = 2
+tooltip_text = "Atlas packing algorithm used by Repack and TTF import (shared)."
+text = "Pack:"
+theme_override_colors/font_color = Color(0.82, 0.87, 0.95, 1)
+
+[node name="PackAlgoOption" type="OptionButton" parent="Main/Left/Toolbar"]
+layout_mode = 2
+custom_minimum_size = Vector2(96, 0)
+tooltip_text = "Atlas packing algorithm used by Repack and TTF import (shared)."
+selected = 0
+item_count = 3
+popup/item_0/text = "Shelf"
+popup/item_0/id = 0
+popup/item_1/text = "MaxRects"
+popup/item_1/id = 1
+popup/item_2/text = "Skyline"
+popup/item_2/id = 2
+
 [node name="RepackBtn" type="Button" parent="Main/Left/Toolbar" unique_id=66703233]
 layout_mode = 2
-tooltip_text = "Shelf-pack glyphs into a tighter power-of-two atlas"
+tooltip_text = "Pack glyphs into a tighter power-of-two atlas using the selected Pack algorithm and padding"
 text = "Repack"
 
 [node name="VSep2" type="VSeparator" parent="Main/Left/Toolbar" unique_id=1347739661]
@@ -544,6 +563,24 @@ theme_override_colors/font_color = Color(0.82, 0.87, 0.95, 1)
 layout_mode = 2
 tooltip_text = "Atlas gap between packed glyphs (0 disables)."
 max_value = 32.0
+
+[node name="PackAlgoLabel" type="Label" parent="TtfDialog/Scroll/VBox/RasterGrid"]
+layout_mode = 2
+text = "Pack algorithm"
+tooltip_text = "How glyphs are packed into the atlas. Shared with the toolbar Repack control."
+theme_override_colors/font_color = Color(0.82, 0.87, 0.95, 1)
+
+[node name="PackAlgoOption" type="OptionButton" parent="TtfDialog/Scroll/VBox/RasterGrid"]
+layout_mode = 2
+tooltip_text = "Shelf: simple rows. MaxRects: tightest fit. Skyline: bottom-left contour packing."
+selected = 0
+item_count = 3
+popup/item_0/text = "Shelf (classic)"
+popup/item_0/id = 0
+popup/item_1/text = "MaxRects (tight)"
+popup/item_1/id = 1
+popup/item_2/text = "Skyline (compact)"
+popup/item_2/id = 2
 
 [node name="TieLabel" type="Label" parent="TtfDialog/Scroll/VBox/RasterGrid"]
 layout_mode = 2

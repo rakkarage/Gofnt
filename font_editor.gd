@@ -23,6 +23,7 @@ var prop_spin: Dictionary = {}
 @onready var glyph_action_btn: Button = $Main/Tabs/Glyph/GlyphActionBtn
 @onready var fullscreen_cb: CheckBox = $Main/Left/Toolbar/FullscreenCb
 @onready var repack_pad_spin: SpinBox = $Main/Left/Toolbar/RepackPadSpin
+@onready var repack_algo_option: OptionButton = $Main/Left/Toolbar/PackAlgoOption
 var _ttf_font_path: String = ""
 @onready var ttf_dialog: AcceptDialog = $TtfDialog
 var preview_scale: float = 2.0
@@ -155,6 +156,7 @@ func _default_ttf_import_settings() -> Dictionary:
 		"proc_effect": 0, # 0=scanlines,1=bayer,2=checker,3=noise,4=edge tint/bevel
 		"proc_color": Color(1, 1, 1, 1),
 		"padding": 0,
+		"pack_algo": 0, # 0=shelf, 1=maxrects, 2=skyline
 		"pack_tiebreaker": 0, # 0=prefer wide, 1=prefer tall
 	}
 
@@ -177,6 +179,7 @@ func _load_ttf_import_settings() -> Dictionary:
 	defaults["proc_effect"] = int(cfg.get_value(SETTINGS_TTF_SECTION, "proc_effect", defaults["proc_effect"]))
 	defaults["proc_color"] = Color.from_string(str(cfg.get_value(SETTINGS_TTF_SECTION, "proc_color", defaults["proc_color"].to_html())), defaults["proc_color"])
 	defaults["padding"] = int(cfg.get_value(SETTINGS_TTF_SECTION, "padding", defaults["padding"]))
+	defaults["pack_algo"] = clampi(int(cfg.get_value(SETTINGS_TTF_SECTION, "pack_algo", defaults["pack_algo"])), 0, 2)
 	defaults["pack_tiebreaker"] = int(cfg.get_value(SETTINGS_TTF_SECTION, "pack_tiebreaker", defaults["pack_tiebreaker"]))
 	defaults["line_height_mode"] = int(cfg.get_value(SETTINGS_TTF_SECTION, "line_height_mode", defaults.get("line_height_mode", 0)))
 	defaults["charset_preset"] = int(cfg.get_value(SETTINGS_TTF_SECTION, "charset_preset", defaults.get("charset_preset", 0)))
@@ -203,19 +206,24 @@ func _save_ttf_import_settings(opts: Dictionary) -> void:
 	cfg.set_value(SETTINGS_TTF_SECTION, "proc_effect", int(opts.get("proc_effect", 0)))
 	cfg.set_value(SETTINGS_TTF_SECTION, "proc_color", (opts.get("proc_color", Color.WHITE) as Color).to_html())
 	cfg.set_value(SETTINGS_TTF_SECTION, "padding", int(opts.get("padding", 0)))
+	cfg.set_value(SETTINGS_TTF_SECTION, "pack_algo", clampi(int(opts.get("pack_algo", 0)), 0, 2))
 	cfg.set_value(SETTINGS_TTF_SECTION, "pack_tiebreaker", int(opts.get("pack_tiebreaker", 0)))
 	cfg.set_value(SETTINGS_TTF_SECTION, "line_height_mode", int(opts.get("line_height_mode", 0)))
 	cfg.set_value(SETTINGS_TTF_SECTION, "charset_preset", int(opts.get("charset_preset", 0)))
 	cfg.set_value(SETTINGS_TTF_SECTION, "charset", str(opts.get("charset", "")))
 	cfg.save(SETTINGS_PATH)
 
-# Shared packing gap: the toolbar repack spin and the TTF import dialog edit the
-# same setting, so changing one is reflected by the other.
-func _save_padding_setting(pad: int) -> void:
+# Toolbar packing controls and the TTF import dialog edit the same settings, so
+# changing one is reflected by the other.
+func _save_repack_setting(key: String, value: int) -> void:
 	var cfg := ConfigFile.new()
 	cfg.load(SETTINGS_PATH)
-	cfg.set_value(SETTINGS_TTF_SECTION, "padding", clampi(pad, 0, 32))
+	cfg.set_value(SETTINGS_TTF_SECTION, key, value)
 	cfg.save(SETTINGS_PATH)
+
+func _pack_algo_name(algo: int) -> String:
+	var names := ["Shelf", "MaxRects", "Skyline"]
+	return names[clampi(algo, 0, 2)]
 
 func _apply_ui_tint() -> void:
 	var accent := Color(0.45, 0.72, 1.0, 0.18)
@@ -266,6 +274,10 @@ func _collect_ttf_options() -> Dictionary:
 	var line_h_node := _ttf("RasterGrid/LineHeightOption") as OptionButton
 	var pp_node := _ttf("RasterGrid/PixelPerfectCheck") as CheckBox
 	var tall_node := _ttf("RasterGrid/TieBox/TieTallRadio") as CheckBox
+	var algo_node := _ttf("RasterGrid/PackAlgoOption") as OptionButton
+	var pack_algo := 0
+	if algo_node != null:
+		pack_algo = clampi(algo_node.get_selected_id(), 0, 2)
 	return {
 		"size": int((_ttf("RasterGrid/SizeSpin") as SpinBox).value),
 		"charset": (_ttf("CharsGrid/CharsetEdit") as TextEdit).text,
@@ -273,6 +285,7 @@ func _collect_ttf_options() -> Dictionary:
 		"filter": 1 if (_ttf("RasterGrid/FilterCheck") as CheckBox).button_pressed else 0,
 		"pixel_perfect": pp_node.button_pressed if pp_node else true,
 		"padding": int((_ttf("RasterGrid/PaddingSpin") as SpinBox).value),
+		"pack_algo": pack_algo,
 		"pack_tiebreaker": 1 if tall_node != null and tall_node.button_pressed else 0,
 		"line_height_mode": line_h_node.get_selected_id() if line_h_node else 0,
 		"outline": int((_ttf("OutlineGrid/OutlineSpin") as SpinBox).value),
@@ -404,13 +417,19 @@ func _bind_ui() -> void:
 	$Main/Left/Toolbar/TrimSelectedBtn.pressed.connect(_on_autoslice_selected)
 	$Main/Left/Toolbar/TrimAllBtn.pressed.connect(_on_autoslice_all)
 	$Main/Left/Toolbar/RepackBtn.pressed.connect(_on_repack)
+	var repack_settings := _load_ttf_import_settings()
 	if repack_pad_spin:
 		_updating_ui = true
-		repack_pad_spin.value = maxi(0, int(_load_ttf_import_settings().get("padding", 0)))
+		repack_pad_spin.value = maxi(0, int(repack_settings.get("padding", 0)))
 		_updating_ui = false
 		repack_pad_spin.value_changed.connect(func(v):
 			if not _updating_ui:
-				_save_padding_setting(int(v))
+				_save_repack_setting("padding", clampi(int(v), 0, 32))
+		)
+	if repack_algo_option:
+		repack_algo_option.select(clampi(int(repack_settings.get("pack_algo", 0)), 0, 2))
+		repack_algo_option.item_selected.connect(func(idx: int):
+			_save_repack_setting("pack_algo", clampi(idx, 0, 2))
 		)
 	fullscreen_cb.toggled.connect(func(pressed: bool): _set_fullscreen(pressed, true))
 
@@ -468,6 +487,8 @@ func _bind_ui() -> void:
 			_updating_ui = true
 			repack_pad_spin.value = int(opts.get("padding", 0))
 			_updating_ui = false
+		if repack_algo_option:
+			repack_algo_option.select(clampi(int(opts.get("pack_algo", 0)), 0, 2))
 		_import_ttf(_ttf_font_path, opts)
 	)
 
@@ -893,27 +914,33 @@ func _do_save_png() -> void:
 
 func _on_repack() -> void:
 	if data == null or data.image == null: return
+	var settings := _load_ttf_import_settings()
 	var pad := 0
 	if repack_pad_spin:
 		pad = maxi(0, int(repack_pad_spin.value))
 	else:
-		pad = maxi(0, int(_load_ttf_import_settings().get("padding", 0)))
-	var glyphs: Array = []
+		pad = maxi(0, int(settings.get("padding", 0)))
+	var algo := clampi(int(settings.get("pack_algo", 0)), 0, 2)
+	if repack_algo_option:
+		algo = clampi(repack_algo_option.get_selected_id(), 0, 2)
+	var rects: Array = []
 	for id in data.sorted_char_ids():
 		var c: Dictionary = data.chars[id]
-		if int(c.get("width", 0)) > 0 and int(c.get("height", 0)) > 0:
-			var d := c.duplicate(); d["id"] = id; glyphs.append(d)
-	glyphs.sort_custom(func(a, b): return int(a.height) > int(b.height) or (int(a.height) == int(b.height) and int(a.width) > int(b.width)))
-	var prefer_wide := int(_load_ttf_import_settings().get("pack_tiebreaker", 0)) == 0
+		var cw := int(c.get("width", 0)); var ch := int(c.get("height", 0))
+		if cw > 0 and ch > 0:
+			var d := c.duplicate(); d["id"] = id
+			rects.append({"c": d, "w": cw, "h": ch})
+	rects.sort_custom(func(a, b): return int(a.h) > int(b.h) or (int(a.h) == int(b.h) and int(a.w) > int(b.w)))
+	var prefer_wide := int(settings.get("pack_tiebreaker", 0)) == 0
 	var best: Dictionary = {}
 	var best_area := 1 << 60
 	var widths := [64, 128, 256, 512, 768, 1024, 1536, 2048, 4096]
 	for w in widths:
-		var pos := _try_pack(glyphs, w, 4096, pad)
+		var pos := _pack_rects(rects, w, 4096, pad, algo)
 		if pos.is_empty(): continue
 		var used_h := 0
 		for it in pos:
-			used_h = maxi(used_h, int(it.y) + int(it.c.height) + pad)
+			used_h = maxi(used_h, int(it.y) + int(it.h) + pad)
 		var h := 1
 		while h < used_h and h < 4096: h *= 2
 		h = clampi(h, 1, 4096)
@@ -957,24 +984,129 @@ func _on_repack() -> void:
 	data.texture = ImageTexture.create_from_image(img)
 	data.common["scaleW"] = nw; data.common["scaleH"] = nh
 	atlas.queue_redraw(); _refresh_preview(); _refresh_stats()
-	var msg := "Repacked atlas to %dx%d (%d glyphs)" % [nw, nh, glyphs.size()]
+	var msg := "Repacked atlas to %dx%d (%d glyphs, %s pack)" % [nw, nh, rects.size(), _pack_algo_name(algo)]
 	if pad > 0:
 		msg += " (pad %d)" % pad
 	_set_status(msg)
 
-func _try_pack(glyphs: Array, W: int, H: int, pad: int) -> Array:
+# All packers take {"c": glyph, "w": width, "h": height} rects and return
+# {"c": glyph, "x": ..., "y": ..., "h": height} placements. Each algorithm
+# reserves (w + pad) x (h + pad), so pad is both the outer margin and the gap
+# between glyphs. The returned h lets callers compute the used atlas height.
+func _pack_rects(rects: Array, W: int, H: int, pad: int, algo: int) -> Array:
+	match algo:
+		1: return _pack_maxrects(rects, W, H, pad)
+		2: return _pack_skyline(rects, W, H, pad)
+		_: return _pack_shelf(rects, W, H, pad)
+
+func _pack_shelf(rects: Array, W: int, H: int, pad: int) -> Array:
 	var x := pad; var y := pad; var row_h := 0
-	var out := []
-	for g in glyphs:
-		var gw := int(g.width); var gh := int(g.height)
+	var out: Array = []
+	for r in rects:
+		var gw := int(r.w); var gh := int(r.h)
 		if x + gw + pad > W:
 			x = pad; y += row_h + pad; row_h = 0
 		if y + gh + pad > H:
 			return []
-		out.append({"c": g, "x": x, "y": y})
+		out.append({"c": r.c, "x": x, "y": y, "h": gh})
 		x += gw + pad
 		row_h = maxi(row_h, gh)
 	return out
+
+# MaxRects, best short-side fit: always place in the free rect that leaves the
+# smallest shorter leftover edge (ties broken by the longer leftover edge).
+func _pack_maxrects(rects: Array, W: int, H: int, pad: int) -> Array:
+	var free_rects: Array = [Rect2i(pad, pad, maxi(0, W - 2 * pad), maxi(0, H - 2 * pad))]
+	var out: Array = []
+	for r in rects:
+		var pw := int(r.w) + pad
+		var ph := int(r.h) + pad
+		var best_idx := -1
+		var best_short := 1 << 60
+		var best_long := 1 << 60
+		for i in free_rects.size():
+			var f: Rect2i = free_rects[i]
+			if f.size.x < pw or f.size.y < ph: continue
+			var short_side := mini(f.size.x - pw, f.size.y - ph)
+			var long_side := maxi(f.size.x - pw, f.size.y - ph)
+			if short_side < best_short or (short_side == best_short and long_side < best_long):
+				best_idx = i; best_short = short_side; best_long = long_side
+		if best_idx < 0: return []
+		var chosen: Rect2i = free_rects[best_idx]
+		var placed := Rect2i(chosen.position, Vector2i(pw, ph))
+		out.append({"c": r.c, "x": chosen.position.x, "y": chosen.position.y, "h": int(r.h)})
+		var next_free: Array = []
+		for fr in free_rects:
+			if not fr.intersects(placed):
+				next_free.append(fr); continue
+			if fr.position.x < placed.position.x:
+				next_free.append(Rect2i(fr.position.x, fr.position.y, placed.position.x - fr.position.x, fr.size.y))
+			if placed.end.x < fr.end.x:
+				next_free.append(Rect2i(placed.end.x, fr.position.y, fr.end.x - placed.end.x, fr.size.y))
+			if fr.position.y < placed.position.y:
+				next_free.append(Rect2i(fr.position.x, fr.position.y, fr.size.x, placed.position.y - fr.position.y))
+			if placed.end.y < fr.end.y:
+				next_free.append(Rect2i(fr.position.x, placed.end.y, fr.size.x, fr.end.y - placed.end.y))
+		# Prune contained rects (skip exact duplicates so we don't lose free space).
+		free_rects.clear()
+		for i in next_free.size():
+			var contained := false
+			for j in next_free.size():
+				if i == j or next_free[i] == next_free[j]: continue
+				if (next_free[j] as Rect2i).encloses(next_free[i]):
+					contained = true; break
+			if not contained:
+				free_rects.append(next_free[i])
+	return out
+
+# Skyline bottom-left: the contour is a list of disjoint (x, y, w) segments
+# covering the atlas width. A glyph goes at the topmost (lowest y) fitting spot
+# that clears every segment it spans; the spanned segments then move down to
+# the glyph's bottom edge.
+func _pack_skyline(rects: Array, W: int, H: int, pad: int) -> Array:
+	var right := W - pad
+	var bottom := H - pad
+	var skyline: Array = [{"x": pad, "y": pad, "w": maxi(0, right - pad)}]
+	var out: Array = []
+	for r in rects:
+		var pw := int(r.w) + pad; var ph := int(r.h) + pad
+		var best_y := 1 << 60
+		var best_x := 0
+		var found := false
+		for i in skyline.size():
+			var sx := int(skyline[i].x)
+			if sx + pw > right: continue
+			var y := int(skyline[i].y)
+			var covered := 0
+			var j := i
+			while covered < pw and j < skyline.size():
+				y = maxi(y, int(skyline[j].y))
+				covered += int(skyline[j].w)
+				j += 1
+			if covered < pw or y + ph > bottom: continue
+			if not found or y < best_y or (y == best_y and sx < best_x):
+				found = true; best_y = y; best_x = sx
+		if not found: return []
+		out.append({"c": r.c, "x": best_x, "y": best_y, "h": int(r.h)})
+		skyline = _skyline_place(skyline, best_x, pw, best_y + ph)
+	return out
+
+func _skyline_place(skyline: Array, px: int, pw: int, new_y: int) -> Array:
+	var result: Array = []
+	var span_end := px + pw
+	for seg in skyline:
+		var sx := int(seg.x); var sy := int(seg.y); var se := sx + int(seg.w)
+		if se <= px or sx >= span_end:
+			result.append(seg)
+			continue
+		if sx < px:
+			result.append({"x": sx, "y": sy, "w": px - sx})
+		var cs := maxi(sx, px); var ce := mini(se, span_end)
+		if cs < ce:
+			result.append({"x": cs, "y": maxi(sy, new_y), "w": ce - cs})
+		if se > span_end:
+			result.append({"x": span_end, "y": sy, "w": se - span_end})
+	return result
 
 func _alpha_bounds_in_rect(r: Rect2i) -> Rect2i:
 	if data == null or data.image == null: return r
@@ -1148,6 +1280,8 @@ func _populate_ttf_dialog(saved: Dictionary) -> void:
 	var pp := _ttf("RasterGrid/PixelPerfectCheck") as CheckBox
 	if pp != null: pp.button_pressed = bool(saved.get("pixel_perfect", true))
 	(_ttf("RasterGrid/PaddingSpin") as SpinBox).value = int(saved.get("padding", 0))
+	var algo_node := _ttf("RasterGrid/PackAlgoOption") as OptionButton
+	if algo_node != null: algo_node.select(clampi(int(saved.get("pack_algo", 0)), 0, 2))
 	_set_ttf_tie_radio(int(saved.get("pack_tiebreaker", 0)))
 	var line_h_node := _ttf("RasterGrid/LineHeightOption") as OptionButton
 	if line_h_node != null:
@@ -1176,6 +1310,8 @@ func _reset_ttf_dialog() -> void:
 	var pp := _ttf("RasterGrid/PixelPerfectCheck") as CheckBox
 	if pp != null: pp.button_pressed = bool(defaults.get("pixel_perfect", true))
 	(_ttf("RasterGrid/PaddingSpin") as SpinBox).value = int(defaults.get("padding", 0))
+	var algo_node := _ttf("RasterGrid/PackAlgoOption") as OptionButton
+	if algo_node != null: algo_node.select(clampi(int(defaults.get("pack_algo", 0)), 0, 2))
 	_set_ttf_tie_radio(int(defaults.get("pack_tiebreaker", 0)))
 	var line_h_node := _ttf("RasterGrid/LineHeightOption") as OptionButton
 	if line_h_node != null: line_h_node.select(0)
@@ -1391,6 +1527,7 @@ func _import_ttf(font_path: String, opts: Dictionary) -> void:
 	_set_status("Packing font atlas...")
 	await get_tree().process_frame
 	var prefer_wide := int(opts.get("pack_tiebreaker", 0)) == 0
+	var pack_algo := clampi(int(opts.get("pack_algo", 0)), 0, 2)
 	var final_line_h := metrics_line_h
 	if int(opts.get("line_height_mode", 0)) == 1:
 		var tight_h := 0
@@ -1399,7 +1536,7 @@ func _import_ttf(font_path: String, opts: Dictionary) -> void:
 				tight_h = maxi(tight_h, int(r.get("oy", 0)) + int(r.get("h", 0)))
 		if tight_h > 0:
 			final_line_h = tight_h
-	_pack_rendered_font(font_face, font_size, rendered, pad, filter_mode, prefer_wide, final_line_h, font_ascent)
+	_pack_rendered_font(font_face, font_size, rendered, pad, filter_mode, prefer_wide, final_line_h, font_ascent, pack_algo)
 	_generating_font = false
 	if open_btn:
 		open_btn.disabled = false
@@ -1631,24 +1768,24 @@ func _apply_procedural_to_bounds(img: Image, b: Rect2i, effect: int, tint: Color
 				out = Color(clampf(base.r * s, 0.0, 1.0), clampf(base.g * s, 0.0, 1.0), clampf(base.b * s, 0.0, 1.0), p.a)
 			img.set_pixel(x, y, out)
 
-func _pack_rendered_font(font_face: String, font_size: int, rendered: Array, pad: int, filter_mode: int = 0, prefer_wide: bool = true, line_h: int = -1, base: int = -1) -> void:
+func _pack_rendered_font(font_face: String, font_size: int, rendered: Array, pad: int, filter_mode: int = 0, prefer_wide: bool = true, line_h: int = -1, base: int = -1, algo: int = 0) -> void:
 	if line_h <= 0:
 		line_h = font_size
 	if base <= 0:
 		base = int(font_size * 0.8)
-	var glyphs: Array = []
+	var rects: Array = []
 	for r in rendered:
 		if int(r.w) > 0 and int(r.h) > 0:
-			glyphs.append(r)
-	glyphs.sort_custom(func(a, b): return int(a.h) > int(b.h) or (int(a.h) == int(b.h) and int(a.w) > int(b.w)))
+			rects.append({"c": r, "w": int(r.w), "h": int(r.h)})
+	rects.sort_custom(func(a, b): return int(a.h) > int(b.h) or (int(a.h) == int(b.h) and int(a.w) > int(b.w)))
 	var best := {}
 	var best_area := 1 << 60
 	for w in [64, 128, 256, 512, 768, 1024, 2048]:
-		var pos := _try_pack_ttf(glyphs, w, 4096, pad)
+		var pos := _pack_rects(rects, w, 4096, pad, algo)
 		if pos.is_empty(): continue
 		var used_h := 0
 		for it in pos:
-			used_h = maxi(used_h, int(it.y) + int(it.c.h) + pad)
+			used_h = maxi(used_h, int(it.y) + int(it.h) + pad)
 		var h := 1
 		while h < used_h and h < 4096: h *= 2
 		h = clampi(h, 1, 4096)
@@ -1705,18 +1842,4 @@ func _pack_rendered_font(font_face: String, font_size: int, rendered: Array, pad
 	_refresh_preview(); atlas.queue_redraw()
 	var filt_name := "Nearest" if filter_mode == 0 else "Linear"
 	var bits_name := "1-bit" if _gen_pixel_perfect else "grayscale"
-	_set_status("Imported TTF/OTF '%s' at size %d: %d glyphs rasterized (%s, %s filter)" % [font_face, font_size, data.chars.size(), bits_name, filt_name])
-
-func _try_pack_ttf(glyphs: Array, W: int, H: int, pad: int) -> Array:
-	var x := pad; var y := pad; var row_h := 0
-	var out := []
-	for g in glyphs:
-		var gw := int(g.w); var gh := int(g.h)
-		if x + gw + pad > W:
-			x = pad; y += row_h + pad; row_h = 0
-		if y + gh + pad > H:
-			return []
-		out.append({"c": g, "x": x, "y": y})
-		x += gw + pad
-		row_h = maxi(row_h, gh)
-	return out
+	_set_status("Imported TTF/OTF '%s' at size %d: %d glyphs rasterized (%s, %s filter, %s pack)" % [font_face, font_size, data.chars.size(), bits_name, filt_name, _pack_algo_name(algo)])

@@ -7,8 +7,8 @@ A small Godot 4 bitmap font editor for BMFont-style `.fnt` fonts and PNG atlases
 - Open, inspect, and edit bitmap fonts (`.fnt` text/XML + atlas image)
 - Edit glyph metrics/rects, add/remove glyphs, and adjust kerning
 - Live text preview with zoom/pan atlas view
-- Trim glyph bounds and repack atlas
-- Import glyphs from an image or generate a bitmap font from TTF/OTF
+- Trim glyph bounds and repack atlas with Shelf, MaxRects, or Skyline packing and adjustable padding
+- Import glyphs from an image or generate a bitmap font from TTF/OTF (same packing settings)
 - Save edited `.fnt` and `.png` files
 
 ## Getting started
